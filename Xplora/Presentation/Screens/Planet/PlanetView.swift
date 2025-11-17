@@ -2,8 +2,7 @@
 //  PlanetView.swift
 //  Xplora
 //
-//  Created by valentina balde on 11/17/25.
-//
+//  Created by valentina balde on 11/17/25
 
 import SwiftUI
 
