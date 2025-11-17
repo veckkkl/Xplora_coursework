@@ -29,22 +29,9 @@
 		3A0690382ECBA4DF00D85EB2 /* XploraUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XploraUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		3A0690402ECBA4DF00D85EB2 /* Exceptions for "Xplora" folder in "Xplora" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 3A0690172ECBA4DE00D85EB2 /* Xplora */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		3A06901A2ECBA4DE00D85EB2 /* Xplora */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				3A0690402ECBA4DF00D85EB2 /* Exceptions for "Xplora" folder in "Xplora" target */,
-			);
 			path = Xplora;
 			sourceTree = "<group>";
 		};
