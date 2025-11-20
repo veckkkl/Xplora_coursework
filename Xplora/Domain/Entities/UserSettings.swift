@@ -7,12 +7,14 @@
 
 import Foundation
 
-struct UserSettings {
+struct UserSettings: Codable {
     var preferredUnits: DistanceUnit
     var showFog: Bool
+    
+    static let `default` = UserSettings(preferredUnits: .kilometers, showFog: true)
 }
 
-enum DistanceUnit: String {
+enum DistanceUnit: String, Codable {
     case kilometers
     case miles
 }

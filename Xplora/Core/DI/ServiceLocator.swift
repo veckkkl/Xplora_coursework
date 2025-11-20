@@ -7,26 +7,30 @@
 
 final class ServiceLocator {
     static let shared = ServiceLocator()
+    private init() {}
+    private var services: [ObjectIdentifier: Any] = [:]
     
-    private let storage = LocalStorage.shared
+    func register<Service>(_ type: Service.Type, instance: Service) {
+        let key = ObjectIdentifier(type)
+        services[key] = instance
+    }
     
-    // Repos
-    lazy var tripsRepo: TripsRepo = TripsRepoImpl(storage: storage)
-    lazy var placesRepo: PlacesRepo = PlacesRepoImpl(storage: storage)
-    lazy var settingsRepo: SettingsRepo = SettingsRepoImpl(storage: storage)
+    func register<Service>(_ type: Service.Type, factory: @escaping () -> Service) {
+        let key = ObjectIdentifier(type)
+        services[key] = factory
+    }
     
-    // Services
-    lazy var locationService: LocationService = LocationServiceImpl()
-    lazy var mistLogicService: FogLogicService = FogLogicServiceImpl()
-    
-    // UseCases
-    lazy var getVisitedCountriesUseCase: GetVisitedCountriesUseCase =
-        GetVisitedCountriesUseCaseImpl(placesRepo: placesRepo)
-    
-    lazy var getTripsTimelineUseCase: GetTripsTimelineUseCase =
-        GetTripsTimelineUseCaseImpl(tripsRepo: tripsRepo)
-    
-    lazy var addVisitedPlaceUseCase: AddVisitedPlaceUseCase =
-        AddVisitedPlaceUseCaseImpl(placesRepo: placesRepo)
+    func resolve<Service>(_ type: Service.Type) -> Service {
+        let key = ObjectIdentifier(type)
+        
+        if let instance = services[key] as? Service {
+            return instance
+        }
+        if let factory = services[key] as? () -> Service {
+            let service = factory()
+            services[key] = service
+            return service
+        }
+        fatalError("No registered service for type")
+    }
 }
-

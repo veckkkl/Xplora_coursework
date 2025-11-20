@@ -6,13 +6,18 @@
 //
 
 final class PlacesRepoImpl: PlacesRepo {
-    private let storage: LocalStorage
-    
-    init(storage: LocalStorage) {
+    private let storage: LocalStorageProtocol
+
+    init(storage: LocalStorageProtocol) {
         self.storage = storage
     }
-    
-    func getVisitedCountries() async throws -> [Country] { storage.countries }
-    func addVisitedPlace(_ place: VisitedPlace, to trip: Trip?) async throws { }
+
+    func getVisitedCountries() async throws -> [Country] {
+        storage.countries
+    }
+
+    func addVisitedPlace(_ place: VisitedPlace, to trip: Trip?) async throws {
+        // логика добавления или обновления
+    }
 }
 

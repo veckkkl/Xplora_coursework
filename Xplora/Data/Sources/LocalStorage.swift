@@ -4,16 +4,49 @@
 //
 //  Created by valentina balde on 11/14/25.
 //
-
 import Foundation
 
-final class LocalStorage {
-    static let shared = LocalStorage()
-    
-    private init() {}
-    
-    //потом заменю на CoreData
-    var trips: [Trip] = []
-    var countries: [Country] = []
-    var settings = UserSettings(preferredUnits: .kilometers, showFog: true)
+final class LocalStorage: LocalStorageProtocol {
+
+    private let userDefaults = UserDefaults.standard
+
+    private enum Keys {
+        static let trips = "trips"
+        static let countries = "countries"
+        static let settings = "settings"
+    }
+
+    init() {}
+
+    func save<T: Codable>(_ value: T, forKey key: String) {
+        let encoder = JSONEncoder()
+        if let data = try? encoder.encode(value) {
+            userDefaults.set(data, forKey: key)
+        }
+    }
+
+    func load<T: Codable>(_ type: T.Type, forKey key: String) -> T? {
+        guard let data = userDefaults.data(forKey: key) else { return nil }
+        let decoder = JSONDecoder()
+        return try? decoder.decode(T.self, from: data)
+    }
+
+    func removeValue(forKey key: String) {
+        userDefaults.removeObject(forKey: key)
+    }
+
+    var trips: [Trip] {
+        get { load([Trip].self, forKey: Keys.trips) ?? [] }
+        set { save(newValue, forKey: Keys.trips) }
+    }
+
+    var countries: [Country] {
+        get { load([Country].self, forKey: Keys.countries) ?? [] }
+        set { save(newValue, forKey: Keys.countries) }
+    }
+
+    var settings: UserSettings {
+        get { load(UserSettings.self, forKey: Keys.settings) ?? .default }
+        set { save(newValue, forKey: Keys.settings) }
+    }
 }
