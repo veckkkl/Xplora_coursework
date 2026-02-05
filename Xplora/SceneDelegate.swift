@@ -34,17 +34,21 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let tripsRepo: TripsRepo = TripsRepoImpl(storage: storage)
         let placesRepo: PlacesRepo = PlacesRepoImpl(storage: storage)
         let settingsRepo: SettingsRepo = SettingsRepoImpl(storage: storage)
+        let markersRepo: CountryVisitMarkersRepo = CountryVisitMarkersRepoImpl()
 
         locator.register(TripsRepo.self, instance: tripsRepo)
         locator.register(PlacesRepo.self, instance: placesRepo)
         locator.register(SettingsRepo.self, instance: settingsRepo)
+        locator.register(CountryVisitMarkersRepo.self, instance: markersRepo)
 
         // Services
         let locationService: LocationService = LocationServiceImpl()
         let fogLogicService: FogLogicService = FogLogicServiceImpl()
+        let fogOverlayProvider: FogOverlayProviding = EmptyFogOverlayProvider()
 
         locator.register(LocationService.self, instance: locationService)
         locator.register(FogLogicService.self, instance: fogLogicService)
+        locator.register(FogOverlayProviding.self, instance: fogOverlayProvider)
 
         // UseCases
         let getVisitedCountriesUseCase: GetVisitedCountriesUseCase =
@@ -56,9 +60,13 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let addVisitedPlaceUseCase: AddVisitedPlaceUseCase =
             AddVisitedPlaceUseCaseImpl(placesRepo: placesRepo)
 
+        let getCountryVisitMarkersUseCase: GetCountryVisitMarkersUseCase =
+            GetCountryVisitMarkersUseCaseImpl(markersRepo: markersRepo)
+
         locator.register(GetVisitedCountriesUseCase.self, instance: getVisitedCountriesUseCase)
         locator.register(GetTripsTimelineUseCase.self, instance: getTripsTimelineUseCase)
         locator.register(AddVisitedPlaceUseCase.self, instance: addVisitedPlaceUseCase)
+        locator.register(GetCountryVisitMarkersUseCase.self, instance: getCountryVisitMarkersUseCase)
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
@@ -85,6 +93,5 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // to restore the scene back to its current state.
     }
 }
-
 
 

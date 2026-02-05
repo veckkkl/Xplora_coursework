@@ -7,25 +7,50 @@
 
 import UIKit
 
+@MainActor
 final class AppCoordinator {
     private let window: UIWindow
     private let locator: ServiceLocator
-    private let navigationController: UINavigationController
+    private var mapCoordinator: MapCoordinator?
     
-    init(window: UIWindow, locator: ServiceLocator = .shared, navigationController: UINavigationController = UINavigationController()) {
+    init(window: UIWindow, locator: ServiceLocator = .shared) {
         self.window = window
         self.locator = locator
-        self.navigationController = navigationController
     }
     
     @MainActor
     func start() {
-        let getVisitedCountriesUseCase: GetVisitedCountriesUseCase = locator.resolve(GetVisitedCountriesUseCase.self)
-        let planetViewModel = PlanetViewModel(getVisitedCountriesUseCase: getVisitedCountriesUseCase)
-        let planetViewController = PlanetViewController(viewModel: planetViewModel)
-        navigationController.viewControllers = [planetViewController]
-        window.rootViewController = navigationController
+        let tabBarController = MainTabBarController()
+
+        let wishlistNav = makePlaceholderNav(title: "Wishlist", systemImageName: "heart")
+        let timelineNav = makePlaceholderNav(title: "Timeline", systemImageName: "clock")
+        let statisticsNav = makePlaceholderNav(title: "Statistics", systemImageName: "chart.bar.xaxis")
+        let profileNav = makePlaceholderNav(title: "Profile", systemImageName: "person.crop.circle")
+
+        let mapNav = UINavigationController()
+        mapNav.tabBarItem = UITabBarItem(title: "Map", image: UIImage(systemName: "globe.europe.africa"), selectedImage: UIImage(systemName: "globe.europe.africa"))
+
+        let mapCoordinator = MapCoordinator(navigationController: mapNav, locator: locator)
+        mapCoordinator.start()
+        self.mapCoordinator = mapCoordinator
+
+        tabBarController.viewControllers = [
+            wishlistNav,
+            timelineNav,
+            mapNav,
+            statisticsNav,
+            profileNav
+        ]
+        tabBarController.selectedIndex = 2
+        window.rootViewController = tabBarController
         window.makeKeyAndVisible()
+    }
+
+    private func makePlaceholderNav(title: String, systemImageName: String) -> UINavigationController {
+        let viewController = PlaceholderViewController(displayTitle: title)
+        let navigationController = UINavigationController(rootViewController: viewController)
+        navigationController.tabBarItem = UITabBarItem(title: title, image: UIImage(systemName: systemImageName), selectedImage: UIImage(systemName: systemImageName))
+        return navigationController
     }
 
 }

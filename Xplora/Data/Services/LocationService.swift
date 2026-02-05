@@ -9,12 +9,22 @@ import Foundation
 import CoreLocation
 
 protocol LocationService {
+    func requestWhenInUseAuthorization()
+    func startUpdatingLocation()
     func requestCurrentLocation() async throws -> LocationCoordinate
 }
 
 final class LocationServiceImpl: NSObject, LocationService {
     private let manager = CLLocationManager()
-    
+
+    func requestWhenInUseAuthorization() {
+        manager.requestWhenInUseAuthorization()
+    }
+
+    func startUpdatingLocation() {
+        manager.startUpdatingLocation()
+    }
+
     func requestCurrentLocation() async throws -> LocationCoordinate {
         return LocationCoordinate(latitude: 0, longitude: 0)
     }

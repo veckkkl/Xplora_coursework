@@ -11,3 +11,4 @@ struct LocationCoordinate:Codable, Equatable {
     let latitude: Double
     let longitude: Double
 }
+
