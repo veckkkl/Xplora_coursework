@@ -51,11 +51,7 @@ final class MapViewController: UIViewController {
 
     private func setupMapView() {
         mapView.translatesAutoresizingMaskIntoConstraints = false
-        if #available(iOS 11.0, *) {
-            mapView.mapType = .mutedStandard
-        } else {
-            mapView.mapType = .standard
-        }
+        mapView.mapType = .hybridFlyover
         mapView.showsCompass = true
         mapView.showsScale = false
         mapView.showsBuildings = false
@@ -122,7 +118,7 @@ final class MapViewController: UIViewController {
             tripNoteCard.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             widthConstraint,
             tripNoteCard.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -32),
-            tripNoteCard.heightAnchor.constraint(equalToConstant: 339)
+            tripNoteCard.heightAnchor.constraint(equalToConstant: 372)
         ])
 
         tripNoteCard.applyPresentationState(.hidden)
@@ -175,6 +171,12 @@ final class MapViewController: UIViewController {
         tripNoteCard.configure(with: model)
         tripNoteCard.isUserInteractionEnabled = true
         tripNoteCard.applyPresentationState(.visible)
+        tripNoteCard.alpha = 0
+        tripNoteCard.transform = CGAffineTransform(translationX: 0, y: 8).scaledBy(x: 0.98, y: 0.98)
+        UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseOut]) {
+            self.tripNoteCard.alpha = 1
+            self.tripNoteCard.transform = .identity
+        }
     }
 
     private func hideNotePreviewCard(animated: Bool) {
@@ -219,6 +221,10 @@ extension MapViewController: MKMapViewDelegate {
 
     func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
         return MKOverlayRenderer(overlay: overlay)
+    }
+
+    func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+        viewModel.didTapOnMapBackground()
     }
 }
 

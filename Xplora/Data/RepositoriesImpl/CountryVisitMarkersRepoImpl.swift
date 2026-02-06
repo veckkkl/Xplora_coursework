@@ -7,6 +7,7 @@ import CoreLocation
 
 final class CountryVisitMarkersRepoImpl: CountryVisitMarkersRepo {
     func getCountryVisitMarkers() async throws -> [CountryVisitMarker] {
+        // TODO: заменить на реальный вызов
         return [
             CountryVisitMarker(
                 countryCode: "FR",

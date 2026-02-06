@@ -66,21 +66,44 @@ final class TripNotePreviewCardView: UIView {
 
     private func setupView() {
         backgroundColor = .clear
+        setupShadowContainer()
+        setupBlurView()
+        setupLabels()
+        setupPlaceCapsule()
 
+        let infoStack = buildInfoStack()
+        blurView.contentView.addSubview(collageView)
+        blurView.contentView.addSubview(infoStack)
+        placeCapsule.addSubview(placeIcon)
+        placeCapsule.addSubview(placeLabel)
+
+        collageHeightConstraint = collageView.heightAnchor.constraint(equalTo: collageView.widthAnchor, multiplier: 193.0 / 258.0)
+        previewLabel.bottomAnchor.constraint(lessThanOrEqualTo: infoStack.bottomAnchor).isActive = true
+        activateConstraints(infoStack: infoStack)
+
+        // TODO: Вариант 2 с прокруткой карты
+             
+    }
+
+    private func setupShadowContainer() {
         shadowContainer.translatesAutoresizingMaskIntoConstraints = false
         shadowContainer.layer.shadowColor = UIColor.black.cgColor
         shadowContainer.layer.shadowOpacity = 0.15
         shadowContainer.layer.shadowRadius = 18
         shadowContainer.layer.shadowOffset = CGSize(width: 0, height: 8)
         addSubview(shadowContainer)
+    }
 
+    private func setupBlurView() {
         blurView.translatesAutoresizingMaskIntoConstraints = false
         blurView.layer.cornerRadius = 22
         blurView.clipsToBounds = true
         shadowContainer.addSubview(blurView)
 
         collageView.translatesAutoresizingMaskIntoConstraints = false
+    }
 
+    private func setupLabels() {
         titleLabel.font = UIFont.systemFont(ofSize: 28, weight: .bold)
         titleLabel.textColor = .label
         titleLabel.numberOfLines = 2
@@ -88,6 +111,15 @@ final class TripNotePreviewCardView: UIView {
         dateLabel.font = UIFont.systemFont(ofSize: 12, weight: .bold)
         dateLabel.textColor = .secondaryLabel
 
+        previewLabel.font = UIFont.systemFont(ofSize: 14, weight: .regular)
+        previewLabel.textColor = .secondaryLabel
+        previewLabel.numberOfLines = 3
+        previewLabel.lineBreakMode = .byTruncatingTail
+        previewLabel.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        previewLabel.setContentHuggingPriority(.defaultLow, for: .vertical)
+    }
+
+    private func setupPlaceCapsule() {
         placeCapsule.translatesAutoresizingMaskIntoConstraints = false
         placeCapsule.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.9)
         placeCapsule.layer.cornerRadius = 12
@@ -101,24 +133,17 @@ final class TripNotePreviewCardView: UIView {
         placeLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
         placeLabel.textColor = .label
         placeLabel.numberOfLines = 1
+    }
 
-        previewLabel.font = UIFont.systemFont(ofSize: 14, weight: .regular)
-        previewLabel.textColor = .secondaryLabel
-        previewLabel.numberOfLines = 4
-
+    private func buildInfoStack() -> UIStackView {
         let infoStack = UIStackView(arrangedSubviews: [titleLabel, dateLabel, placeCapsule, previewLabel])
         infoStack.axis = .vertical
         infoStack.spacing = 8
         infoStack.translatesAutoresizingMaskIntoConstraints = false
+        return infoStack
+    }
 
-        blurView.contentView.addSubview(collageView)
-        blurView.contentView.addSubview(infoStack)
-
-        placeCapsule.addSubview(placeIcon)
-        placeCapsule.addSubview(placeLabel)
-
-        collageHeightConstraint = collageView.heightAnchor.constraint(equalTo: collageView.widthAnchor, multiplier: 193.0 / 258.0)
-
+    private func activateConstraints(infoStack: UIStackView) {
         NSLayoutConstraint.activate([
             shadowContainer.topAnchor.constraint(equalTo: topAnchor),
             shadowContainer.bottomAnchor.constraint(equalTo: bottomAnchor),
