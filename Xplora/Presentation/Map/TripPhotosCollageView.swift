@@ -3,6 +3,7 @@
 //  Xplora
 
 
+import SnapKit
 import UIKit
 
 final class TripPhotosCollageView: UIView {
@@ -63,30 +64,27 @@ final class TripPhotosCollageView: UIView {
     private func setupView() {
         backgroundColor = .clear
 
-        containerView.translatesAutoresizingMaskIntoConstraints = false
-        containerView.layer.cornerRadius = 12
+        containerView.layer.cornerRadius = 14
         containerView.clipsToBounds = true
         containerView.backgroundColor = .clear
         addSubview(containerView)
 
-        collectionView.translatesAutoresizingMaskIntoConstraints = false
         collectionView.backgroundColor = .clear
         collectionView.dataSource = self
         collectionView.isScrollEnabled = false
         collectionView.register(TripPhotosCollageCell.self, forCellWithReuseIdentifier: TripPhotosCollageCell.reuseIdentifier)
         containerView.addSubview(collectionView)
 
-        NSLayoutConstraint.activate([
-            containerView.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            containerView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            containerView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            containerView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        containerView.snp.makeConstraints { make in
+            make.top.equalToSuperview().offset(8)
+            make.leading.equalToSuperview().offset(8)
+            make.trailing.equalToSuperview().offset(-8)
+            make.bottom.equalToSuperview()
+        }
 
-            collectionView.topAnchor.constraint(equalTo: containerView.topAnchor),
-            collectionView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
-            collectionView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
-            collectionView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor)
-        ])
+        collectionView.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
     }
 
     private func makeLayout(style: CollageLayoutStyle, count: Int) -> UICollectionViewLayout {

@@ -4,6 +4,7 @@
 
 
 import MapKit
+import SnapKit
 import UIKit
 
 final class MapViewController: UIViewController {
@@ -12,7 +13,6 @@ final class MapViewController: UIViewController {
     private let mapView = MKMapView()
     private let addNoteButton = UIButton(type: .system)
     private let addNoteContainer = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
-    private let tripNoteCard = TripNotePreviewCardView()
     private var didSetInitialCamera = false
 
     init(viewModel: MapViewModelInput & MapViewModelOutput) {
@@ -29,7 +29,6 @@ final class MapViewController: UIViewController {
         view.backgroundColor = .systemBackground
         setupMapView()
         setupAddNoteButton()
-        setupTripNoteCard()
         bindViewModel()
         viewModel.viewDidLoad()
     }
@@ -50,7 +49,6 @@ final class MapViewController: UIViewController {
     }
 
     private func setupMapView() {
-        mapView.translatesAutoresizingMaskIntoConstraints = false
         mapView.mapType = .hybridFlyover
         mapView.showsCompass = true
         mapView.showsScale = false
@@ -63,28 +61,19 @@ final class MapViewController: UIViewController {
         mapView.cameraBoundary = nil
         mapView.cameraZoomRange = nil
         mapView.delegate = self
-        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(didTapMapBackground(_:)))
-        tapGesture.cancelsTouchesInView = false
-        tapGesture.delegate = self
-        mapView.addGestureRecognizer(tapGesture)
-        mapView.register(CountryVisitAnnotationView.self, forAnnotationViewWithReuseIdentifier: CountryVisitAnnotationView.reuseIdentifier)
+        mapView.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: CountryVisitAnnotationView.reuseIdentifier)
         view.addSubview(mapView)
 
-        NSLayoutConstraint.activate([
-            mapView.topAnchor.constraint(equalTo: view.topAnchor),
-            mapView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            mapView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            mapView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
-        ])
+        mapView.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
     }
 
     private func setupAddNoteButton() {
-        addNoteContainer.translatesAutoresizingMaskIntoConstraints = false
         addNoteContainer.clipsToBounds = true
         addNoteContainer.layer.cornerRadius = 16
         view.addSubview(addNoteContainer)
 
-        addNoteButton.translatesAutoresizingMaskIntoConstraints = false
         var configuration = UIButton.Configuration.tinted()
         configuration.title = "Add a note to my trip"
         configuration.baseForegroundColor = .systemBlue
@@ -95,33 +84,18 @@ final class MapViewController: UIViewController {
         addNoteButton.addTarget(self, action: #selector(didTapAddNote), for: .touchUpInside)
         addNoteContainer.contentView.addSubview(addNoteButton)
 
-        NSLayoutConstraint.activate([
-            addNoteContainer.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
-            addNoteContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            addNoteContainer.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -32),
-            addNoteButton.topAnchor.constraint(equalTo: addNoteContainer.contentView.topAnchor, constant: 6),
-            addNoteButton.bottomAnchor.constraint(equalTo: addNoteContainer.contentView.bottomAnchor, constant: -6),
-            addNoteButton.leadingAnchor.constraint(equalTo: addNoteContainer.contentView.leadingAnchor, constant: 8),
-            addNoteButton.trailingAnchor.constraint(equalTo: addNoteContainer.contentView.trailingAnchor, constant: -8)
-        ])
-    }
+        addNoteContainer.snp.makeConstraints { make in
+            make.top.equalTo(view.safeAreaLayoutGuide.snp.top).offset(8)
+            make.centerX.equalToSuperview()
+            make.width.lessThanOrEqualToSuperview().inset(16)
+        }
 
-    private func setupTripNoteCard() {
-        tripNoteCard.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(tripNoteCard)
-
-        let widthConstraint = tripNoteCard.widthAnchor.constraint(equalToConstant: 273)
-        widthConstraint.priority = .defaultHigh
-
-        NSLayoutConstraint.activate([
-            tripNoteCard.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 64),
-            tripNoteCard.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            widthConstraint,
-            tripNoteCard.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -32),
-            tripNoteCard.heightAnchor.constraint(equalToConstant: 372)
-        ])
-
-        tripNoteCard.applyPresentationState(.hidden)
+        addNoteButton.snp.makeConstraints { make in
+            make.top.equalTo(addNoteContainer.contentView.snp.top).offset(6)
+            make.bottom.equalTo(addNoteContainer.contentView.snp.bottom).offset(-6)
+            make.leading.equalTo(addNoteContainer.contentView.snp.leading).offset(8)
+            make.trailing.equalTo(addNoteContainer.contentView.snp.trailing).offset(-8)
+        }
     }
 
     private func bindViewModel() {
@@ -130,14 +104,6 @@ final class MapViewController: UIViewController {
         }
         viewModel.onOverlaysUpdated = { [weak self] overlays in
             self?.renderOverlays(overlays)
-        }
-        viewModel.onNotePreviewModelChanged = { [weak self] model in
-            guard let self else { return }
-            if let model {
-                self.showNotePreviewCard(model: model)
-            } else {
-                self.hideNotePreviewCard(animated: true)
-            }
         }
     }
 
@@ -167,40 +133,6 @@ final class MapViewController: UIViewController {
         mapView.addOverlays(overlays)
     }
 
-    private func showNotePreviewCard(model: TripNotePreviewViewModel) {
-        tripNoteCard.configure(with: model)
-        tripNoteCard.isUserInteractionEnabled = true
-        tripNoteCard.applyPresentationState(.visible)
-        tripNoteCard.alpha = 0
-        tripNoteCard.transform = CGAffineTransform(translationX: 0, y: 8).scaledBy(x: 0.98, y: 0.98)
-        UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseOut]) {
-            self.tripNoteCard.alpha = 1
-            self.tripNoteCard.transform = .identity
-        }
-    }
-
-    private func hideNotePreviewCard(animated: Bool) {
-        guard !tripNoteCard.isHidden else { return }
-        let animations = {
-            self.tripNoteCard.alpha = 0
-            self.tripNoteCard.transform = CGAffineTransform(translationX: 0, y: 10)
-        }
-        let completion: (Bool) -> Void = { _ in
-            self.tripNoteCard.isUserInteractionEnabled = false
-            self.tripNoteCard.applyPresentationState(.hidden)
-        }
-        if animated {
-            UIView.animate(withDuration: 0.18, animations: animations, completion: completion)
-        } else {
-            animations()
-            completion(true)
-        }
-    }
-
-    @objc private func didTapMapBackground(_ recognizer: UITapGestureRecognizer) {
-        viewModel.didTapOnMapBackground()
-    }
-
     @objc private func didTapAddNote() {
         viewModel.didTapAddNote()
     }
@@ -208,34 +140,28 @@ final class MapViewController: UIViewController {
 
 extension MapViewController: MKMapViewDelegate {
     func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-        guard annotation is CountryVisitAnnotation else { return nil }
+        guard let annotation = annotation as? CountryVisitAnnotation else { return nil }
         let view = mapView.dequeueReusableAnnotationView(withIdentifier: CountryVisitAnnotationView.reuseIdentifier, for: annotation)
         view.annotation = annotation
-        return view
-    }
 
-    func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
-        guard let annotation = view.annotation as? CountryVisitAnnotation else { return }
-        viewModel.didSelectMarker(annotation.marker)
+        if let markerView = view as? MKMarkerAnnotationView {
+            markerView.canShowCallout = true
+            markerView.markerTintColor = UIColor(named: "accent_orange") ?? .systemOrange
+            markerView.glyphImage = UIImage(systemName: "mappin")
+            markerView.titleVisibility = .hidden
+            markerView.subtitleVisibility = .hidden
+            let previewModel = viewModel.previewModel(for: annotation.marker)
+            let calloutView = TripNoteCalloutView(model: previewModel)
+            calloutView.onTap = { [weak self] in
+                self?.viewModel.didSelectMarker(annotation.marker)
+            }
+            markerView.detailCalloutAccessoryView = calloutView
+        }
+
+        return view
     }
 
     func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
         return MKOverlayRenderer(overlay: overlay)
-    }
-
-    func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
-        viewModel.didTapOnMapBackground()
-    }
-}
-
-extension MapViewController: UIGestureRecognizerDelegate {
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        if touch.view?.isDescendant(of: tripNoteCard) == true {
-            return false
-        }
-        if touch.view is MKAnnotationView || touch.view?.superview is MKAnnotationView {
-            return false
-        }
-        return true
     }
 }

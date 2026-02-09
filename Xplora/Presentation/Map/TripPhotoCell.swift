@@ -3,6 +3,7 @@
 //  Xplora
 
 
+import SnapKit
 import UIKit
 
 final class TripPhotoCell: UICollectionViewCell {
@@ -31,16 +32,12 @@ final class TripPhotoCell: UICollectionViewCell {
         contentView.layer.borderColor = UIColor.white.cgColor
         contentView.clipsToBounds = true
 
-        imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true
         contentView.addSubview(imageView)
 
-        NSLayoutConstraint.activate([
-            imageView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            imageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            imageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            imageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
-        ])
+        imageView.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
     }
 }

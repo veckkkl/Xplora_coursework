@@ -12,13 +12,9 @@ final class CountryVisitAnnotation: NSObject, MKAnnotation {
         marker.coordinate
     }
 
-    var title: String? {
-        marker.title
-    }
+    var title: String? { nil }
 
-    var subtitle: String? {
-        marker.dateRangeText
-    }
+    var subtitle: String? { nil }
 
     var countryCode: String {
         marker.countryCode

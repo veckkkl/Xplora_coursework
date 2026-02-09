@@ -125,6 +125,7 @@
 			);
 			name = Xplora;
 			packageProductDependencies = (
+				F1A2B3C4D5E6F7890ABCDEF2 /* SnapKit */,
 			);
 			productName = Xplora;
 			productReference = 3A0690182ECBA4DE00D85EB2 /* Xplora.app */;
@@ -208,6 +209,9 @@
 			);
 			mainGroup = 3A06900F2ECBA4DD00D85EB2;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F1A2B3C4D5E6F7890ABCDEF1 /* SnapKit */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3A0690192ECBA4DE00D85EB2 /* Products */;
 			projectDirPath = "";
@@ -219,6 +223,25 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F1A2B3C4D5E6F7890ABCDEF1 /* SnapKit */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SnapKit/SnapKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.7.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F1A2B3C4D5E6F7890ABCDEF2 /* SnapKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F1A2B3C4D5E6F7890ABCDEF1 /* SnapKit */;
+			productName = SnapKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		3A0690162ECBA4DE00D85EB2 /* Resources */ = {

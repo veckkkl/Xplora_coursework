@@ -3,6 +3,7 @@
 //  Xplora
 
 
+import SnapKit
 import UIKit
 
 final class TripPhotoCollageView: UIView {
@@ -32,19 +33,15 @@ final class TripPhotoCollageView: UIView {
         clipsToBounds = true
         layer.cornerRadius = 20
 
-        collectionView.translatesAutoresizingMaskIntoConstraints = false
         collectionView.backgroundColor = .white
         collectionView.dataSource = self
         collectionView.isScrollEnabled = false
         collectionView.register(TripPhotoCell.self, forCellWithReuseIdentifier: TripPhotoCell.reuseIdentifier)
         addSubview(collectionView)
 
-        NSLayoutConstraint.activate([
-            collectionView.topAnchor.constraint(equalTo: topAnchor),
-            collectionView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            collectionView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            collectionView.trailingAnchor.constraint(equalTo: trailingAnchor)
-        ])
+        collectionView.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
     }
 
     private static func makeLayout(for count: Int) -> UICollectionViewLayout {
