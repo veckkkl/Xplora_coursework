@@ -29,13 +29,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private func configureDependencies() {
         let locator = ServiceLocator.shared
         let storage: LocalStorageProtocol = LocalStorage()
+        let coreDataStack = CoreDataStack()
 
         // Repositories
         let tripsRepo: TripsRepo = TripsRepoImpl(storage: storage)
         let placesRepo: PlacesRepo = PlacesRepoImpl(storage: storage)
         let settingsRepo: SettingsRepo = SettingsRepoImpl(storage: storage)
         let markersRepo: CountryVisitMarkersRepo = CountryVisitMarkersRepoImpl()
-        let notesRepo: NotesRepo = NotesRepoImpl()
+        let notesRepo: NotesRepo = NotesRepoImpl(coreDataStack: coreDataStack)
 
         locator.register(TripsRepo.self, instance: tripsRepo)
         locator.register(PlacesRepo.self, instance: placesRepo)
@@ -103,4 +104,3 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // to restore the scene back to its current state.
     }
 }
-
