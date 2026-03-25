@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import UIKit
 
 enum NoteViewMode {
     case view
@@ -42,10 +43,13 @@ protocol NoteViewModelInput: AnyObject {
     func didTapCancelEdit()
     func didToggleBookmark()
     func didTapSearch()
+    func didTapAddPhoto()
+    func didAddPhotos(_ images: [UIImage])
     func didRemovePhoto(at index: Int)
     func didSelectLocation(placeName: String, address: String?, latitude: Double, longitude: Double)
     func didRemoveLocation()
     func didUpdateDateRangeText(_ text: String)
+    func didDiscardChangesBeforeClose()
 }
 
 @MainActor
@@ -53,6 +57,7 @@ protocol NoteViewModelOutput: AnyObject {
     var onStateChange: ((NoteViewState) -> Void)? { get set }
     var onError: ((String) -> Void)? { get set }
     var onSearchRequested: (() -> Void)? { get set }
+    var onPhotoSourceRequested: (() -> Void)? { get set }
 }
 
 @MainActor
@@ -60,12 +65,14 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     var onStateChange: ((NoteViewState) -> Void)?
     var onError: ((String) -> Void)?
     var onSearchRequested: (() -> Void)?
+    var onPhotoSourceRequested: (() -> Void)?
 
     private let noteId: String?
     private let initialCoordinate: LocationCoordinate?
     private let getNoteUseCase: GetNoteUseCase
     private let saveNoteUseCase: SaveNoteUseCase
     private let deleteNoteUseCase: DeleteNoteUseCase
+    private let notePhotoStorage: NotePhotoStorage
     private weak var output: NoteModuleOutput?
     private weak var router: NoteRouter?
 
@@ -73,6 +80,8 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     private var draft: Note?
     private var mode: NoteViewMode = .view
     private var isLoading = false
+    private var pendingFileDeletionPaths = Set<String>()
+    private var sessionCreatedPhotoPaths = Set<String>()
 
     init(
         noteId: String?,
@@ -80,6 +89,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         getNoteUseCase: GetNoteUseCase,
         saveNoteUseCase: SaveNoteUseCase,
         deleteNoteUseCase: DeleteNoteUseCase,
+        notePhotoStorage: NotePhotoStorage,
         output: NoteModuleOutput?,
         router: NoteRouter
     ) {
@@ -88,6 +98,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         self.getNoteUseCase = getNoteUseCase
         self.saveNoteUseCase = saveNoteUseCase
         self.deleteNoteUseCase = deleteNoteUseCase
+        self.notePhotoStorage = notePhotoStorage
         self.output = output
         self.router = router
     }
@@ -137,11 +148,14 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         current.updatedAt = Date()
         Task {
             do {
+                current.photos = normalizedPhotos(current.photos)
                 let saved = try await saveNoteUseCase.execute(note: current)
+                cleanupDeletedFilesAfterSave()
                 originalNote = saved
                 draft = saved
                 mode = .view
                 isLoading = false
+                clearPhotoSessionState()
                 publish()
                 output?.noteModuleDidSave(note: saved)
             } catch {
@@ -160,7 +174,9 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         Task {
             do {
                 try await deleteNoteUseCase.execute(noteId: note.id)
+                try? notePhotoStorage.deleteNoteDirectory(noteId: note.id)
                 isLoading = false
+                clearPhotoSessionState()
                 publish()
                 output?.noteModuleDidDelete(noteId: note.id)
                 router?.closeNote()
@@ -174,16 +190,19 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     func didTapEdit() {
         guard originalNote != nil else { return }
+        clearPhotoSessionState()
         mode = .edit
         publish()
     }
 
     func didTapCancelEdit() {
         if let originalNote {
+            cleanupUnsavedPhotoFiles()
             draft = originalNote
             mode = .view
             publish()
         } else {
+            cleanupUnsavedPhotoFiles()
             router?.closeNote()
         }
     }
@@ -202,9 +221,11 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         Task {
             do {
                 let saved = try await saveNoteUseCase.execute(note: current)
+                cleanupDeletedFilesAfterSave()
                 originalNote = saved
                 draft = saved
                 isLoading = false
+                clearPhotoSessionState()
                 publish()
                 output?.noteModuleDidSave(note: saved)
             } catch {
@@ -220,10 +241,69 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         onSearchRequested?()
     }
 
+    func didTapAddPhoto() {
+        guard mode == .edit else { return }
+        onPhotoSourceRequested?()
+    }
+
+    func didAddPhotos(_ images: [UIImage]) {
+        guard mode == .edit else { return }
+        guard !images.isEmpty else { return }
+        guard var current = draft else { return }
+
+        var addedPhotos: [NotePhoto] = []
+        var failedCount = 0
+
+        for image in images {
+            let photoId = UUID().uuidString
+            do {
+                let photo = try notePhotoStorage.save(
+                    image: image,
+                    noteId: current.id,
+                    photoId: photoId,
+                    orderIndex: current.photos.count + addedPhotos.count
+                )
+                addedPhotos.append(photo)
+                sessionCreatedPhotoPaths.insert(photo.localPath)
+            } catch {
+                failedCount += 1
+            }
+        }
+
+        guard !addedPhotos.isEmpty else {
+            onError?("Couldn't add photos. Please try again.")
+            return
+        }
+
+        current.photos.append(contentsOf: addedPhotos)
+        current.photos = normalizedPhotos(current.photos)
+        draft = current
+        publish()
+
+        if failedCount > 0 {
+            onError?("Some photos couldn't be added.")
+        }
+    }
+
     func didRemovePhoto(at index: Int) {
         guard var current = draft else { return }
-        guard current.photoURLs.indices.contains(index) else { return }
-        current.photoURLs.remove(at: index)
+        var sortedPhotos = current.photos.sorted { $0.orderIndex < $1.orderIndex }
+        guard sortedPhotos.indices.contains(index) else { return }
+        let removedPhoto = sortedPhotos.remove(at: index)
+
+        let originalPhotoIDs = Set((originalNote?.photos ?? []).map(\.id))
+        if originalPhotoIDs.contains(removedPhoto.id) {
+            pendingFileDeletionPaths.insert(removedPhoto.localPath)
+        } else {
+            do {
+                try notePhotoStorage.deletePhoto(localPath: removedPhoto.localPath)
+            } catch {
+                onError?("Couldn't remove photo from device storage.")
+            }
+            sessionCreatedPhotoPaths.remove(removedPhoto.localPath)
+        }
+
+        current.photos = normalizedPhotos(sortedPhotos)
         draft = current
         publish()
     }
@@ -232,10 +312,11 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         guard var current = draft else { return }
         let trimmedName = placeName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        let trimmedAddress = address?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let (city, country) = parseCityCountry(from: address)
         current.location = NoteLocation(
             placeName: trimmedName,
-            address: (trimmedAddress?.isEmpty ?? true) ? nil : trimmedAddress,
+            city: city,
+            country: country,
             latitude: latitude,
             longitude: longitude
         )
@@ -245,7 +326,13 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     func didRemoveLocation() {
         guard var current = draft else { return }
-        current.location = nil
+        current.location = NoteLocation(
+            placeName: "",
+            city: "",
+            country: "",
+            latitude: current.location.latitude,
+            longitude: current.location.longitude
+        )
         draft = current
         publish()
     }
@@ -255,6 +342,10 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         current.dateRangeText = text
         draft = current
         publish()
+    }
+
+    func didDiscardChangesBeforeClose() {
+        cleanupUnsavedPhotoFiles()
     }
 
     private func loadNote(id: String) {
@@ -268,6 +359,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
                 draft = note
                 mode = .view
                 isLoading = false
+                clearPhotoSessionState()
                 publish()
             } catch {
                 isLoading = false
@@ -282,16 +374,19 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         let now = Date()
         let note = Note(
             id: UUID().uuidString,
-            coordinate: coordinate,
             title: nil,
             text: "",
-            photoURLs: [],
             createdAt: now,
             updatedAt: now,
-            city: nil,
-            country: nil,
-            location: nil,
             isBookmarked: false,
+            location: NoteLocation(
+                placeName: "",
+                city: "",
+                country: "",
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            ),
+            photos: [],
             dateRangeText: nil,
             headerTitle: nil
         )
@@ -299,6 +394,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         draft = note
         mode = .edit
         isLoading = false
+        clearPhotoSessionState()
         publish()
     }
 
@@ -310,12 +406,12 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
             title: current.title ?? "",
             placeTitle: formatHeaderTitle(for: current),
             text: current.text,
-            locationTitle: current.location?.placeName ?? "",
-            locationSubtitle: current.location?.address ?? "",
-            hasLocation: current.location != nil,
-            locationCoordinate: current.location.map {
-                LocationCoordinate(latitude: $0.latitude, longitude: $0.longitude)
-            },
+            locationTitle: current.location.hasDisplayableValue ? current.location.placeName : "",
+            locationSubtitle: current.location.hasDisplayableValue ? (current.location.address ?? "") : "",
+            hasLocation: current.location.hasDisplayableValue,
+            locationCoordinate: current.location.hasDisplayableValue
+                ? LocationCoordinate(latitude: current.location.latitude, longitude: current.location.longitude)
+                : nil,
             dateText: formatDateText(for: current),
             isSaveEnabled: isSaveEnabled(for: current),
             isDeleteVisible: originalNote != nil,
@@ -330,7 +426,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     private func isSaveEnabled(for note: Note) -> Bool {
         let trimmed = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
+        guard !trimmed.isEmpty, note.location.hasDisplayableValue else { return false }
         if let original = originalNote {
             return original != note
         }
@@ -340,6 +436,8 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     private func hasUnsavedChanges(_ note: Note) -> Bool {
         guard let original = originalNote else {
             return !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || note.location.hasDisplayableValue
+                || !note.photos.isEmpty
         }
         return original != note
     }
@@ -357,6 +455,21 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         return "Untitled"
     }
 
+    private func parseCityCountry(from address: String?) -> (String, String) {
+        let trimmed = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return ("", "") }
+        let parts = trimmed
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if parts.count >= 2 {
+            return (parts[parts.count - 2], parts[parts.count - 1])
+        }
+
+        return (parts.first ?? "", "")
+    }
+
     private func formatDateText(for note: Note) -> String {
         if let range = note.dateRangeText, !range.isEmpty {
             return range
@@ -370,4 +483,38 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         formatter.timeStyle = .short
         return formatter
     }()
+
+    private func normalizedPhotos(_ photos: [NotePhoto]) -> [NotePhoto] {
+        photos
+            .sorted { $0.orderIndex < $1.orderIndex }
+            .enumerated()
+            .map { index, photo in
+                var updated = photo
+                updated.orderIndex = index
+                return updated
+            }
+    }
+
+    private func cleanupUnsavedPhotoFiles() {
+        var pathsToDelete = sessionCreatedPhotoPaths
+
+        if originalNote == nil, let current = draft {
+            pathsToDelete.formUnion(current.photos.map(\.localPath))
+        }
+
+        if !pathsToDelete.isEmpty {
+            try? notePhotoStorage.deletePhotos(localPaths: Array(pathsToDelete))
+        }
+        clearPhotoSessionState()
+    }
+
+    private func cleanupDeletedFilesAfterSave() {
+        guard !pendingFileDeletionPaths.isEmpty else { return }
+        try? notePhotoStorage.deletePhotos(localPaths: Array(pendingFileDeletionPaths))
+    }
+
+    private func clearPhotoSessionState() {
+        pendingFileDeletionPaths.removeAll()
+        sessionCreatedPhotoPaths.removeAll()
+    }
 }

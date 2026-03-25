@@ -37,10 +37,12 @@ final class MapCoordinator {
 
         let saveNoteUseCase: SaveNoteUseCase = locator.resolve(SaveNoteUseCase.self)
         let deleteNoteUseCase: DeleteNoteUseCase = locator.resolve(DeleteNoteUseCase.self)
+        let notePhotoStorage: NotePhotoStorage = locator.resolve(NotePhotoStorage.self)
         let noteBuilder = NoteModuleBuilder(
             getNoteUseCase: getNoteUseCase,
             saveNoteUseCase: saveNoteUseCase,
-            deleteNoteUseCase: deleteNoteUseCase
+            deleteNoteUseCase: deleteNoteUseCase,
+            notePhotoStorage: notePhotoStorage
         )
         noteRouter = NoteRouterImpl(navigationController: navigationController, builder: noteBuilder)
     }
@@ -49,6 +51,8 @@ final class MapCoordinator {
         switch route {
         case .addNote:
             showAddNote()
+        case .showNotes:
+            showNotes()
         case .showCountryFirstNote(_, let noteId, let coordinate):
             showCountryFirstNote(noteId: noteId, coordinate: coordinate)
         }
@@ -71,6 +75,24 @@ final class MapCoordinator {
 
     private func showCountryFirstNote(noteId: String?, coordinate: LocationCoordinate) {
         noteRouter?.showNote(noteId: noteId, coordinate: coordinate, output: self)
+    }
+
+    private func showNotes() {
+        let getAllNotesUseCase: GetAllNotesUseCase = locator.resolve(GetAllNotesUseCase.self)
+        let notesViewModel = NotesListViewModel(getAllNotesUseCase: getAllNotesUseCase)
+        let notesViewController = NotesListViewController(viewModel: notesViewModel)
+
+        notesViewModel.onRoute = { [weak self] route in
+            guard let self, let noteRouter = self.noteRouter else { return }
+            switch route {
+            case .addNew:
+                noteRouter.showNote(noteId: nil, coordinate: nil, output: self)
+            case .open(let noteId):
+                noteRouter.showNote(noteId: noteId, coordinate: nil, output: self)
+            }
+        }
+
+        navigationController.pushViewController(notesViewController, animated: true)
     }
 }
 
