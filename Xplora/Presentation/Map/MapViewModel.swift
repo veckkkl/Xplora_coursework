@@ -1,7 +1,7 @@
 //
 //  MapViewModel.swift
 //  Xplora
-
+//
 
 import Foundation
 import MapKit
@@ -35,20 +35,17 @@ final class MapViewModel: MapViewModelInput, MapViewModelOutput {
     var onOverlaysUpdated: (([MKOverlay]) -> Void)?
     var onRoute: ((MapRoute) -> Void)?
 
-    private let getCountryVisitMarkersUseCase: GetCountryVisitMarkersUseCase
-    private let getNoteUseCase: GetNoteUseCase
+    private let getAllNotesUseCase: GetAllNotesUseCase
     private let fogOverlayProvider: FogOverlayProviding
     private let locationService: LocationService
     private var cachedNotesById: [String: Note] = [:]
 
     init(
-        getCountryVisitMarkersUseCase: GetCountryVisitMarkersUseCase,
-        getNoteUseCase: GetNoteUseCase,
+        getAllNotesUseCase: GetAllNotesUseCase,
         fogOverlayProvider: FogOverlayProviding,
         locationService: LocationService
     ) {
-        self.getCountryVisitMarkersUseCase = getCountryVisitMarkersUseCase
-        self.getNoteUseCase = getNoteUseCase
+        self.getAllNotesUseCase = getAllNotesUseCase
         self.fogOverlayProvider = fogOverlayProvider
         self.locationService = locationService
     }
@@ -91,10 +88,12 @@ final class MapViewModel: MapViewModelInput, MapViewModelOutput {
     private func loadMarkers() {
         Task {
             do {
-                let markers = try await getCountryVisitMarkersUseCase.execute()
-                cachedNotesById = await fetchNotes(for: markers)
+                let notes = try await getAllNotesUseCase.execute()
+                let notesWithLocation = notes.filter { $0.location != nil }
+                cachedNotesById = Dictionary(uniqueKeysWithValues: notesWithLocation.map { ($0.id, $0) })
+                let markers = notesWithLocation.compactMap(Self.makeMarker(from:))
                 onMarkersUpdated?(markers)
-                onOverlaysUpdated?([])
+                onOverlaysUpdated?(fogOverlayProvider.makeOverlays(visitedCountryCodes: []))
             } catch {
                 cachedNotesById = [:]
                 onMarkersUpdated?([])
@@ -103,19 +102,30 @@ final class MapViewModel: MapViewModelInput, MapViewModelOutput {
         }
     }
 
-    private func fetchNotes(for markers: [CountryVisitMarker]) async -> [String: Note] {
-        var notesById: [String: Note] = [:]
+    private static func makeMarker(from note: Note) -> CountryVisitMarker? {
+        guard let location = note.location else { return nil }
 
-        for marker in markers {
-            guard let noteId = marker.firstNoteId else { continue }
-            do {
-                let note = try await getNoteUseCase.execute(id: noteId)
-                notesById[noteId] = note
-            } catch {
-                continue
-            }
-        }
+        let placeName = location.placeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noteTitle = note.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let title = !placeName.isEmpty ? placeName : (!noteTitle.isEmpty ? noteTitle : "Pinned note")
+        let countryCode = location.country.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let dateRange = (note.dateRangeText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            ? (note.dateRangeText ?? "")
+            : markerDateFormatter.string(from: note.updatedAt)
 
-        return notesById
+        return CountryVisitMarker(
+            countryCode: countryCode,
+            title: title,
+            dateRangeText: dateRange,
+            coordinate: CLLocationCoordinate2D(latitude: location.latitude, longitude: location.longitude),
+            firstNoteId: note.id
+        )
     }
+
+    private static let markerDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
 }

@@ -18,13 +18,12 @@ final class MapCoordinator {
     }
 
     func start() {
-        let markersUseCase: GetCountryVisitMarkersUseCase = locator.resolve(GetCountryVisitMarkersUseCase.self)
         let getNoteUseCase: GetNoteUseCase = locator.resolve(GetNoteUseCase.self)
+        let getAllNotesUseCase: GetAllNotesUseCase = locator.resolve(GetAllNotesUseCase.self)
         let fogOverlayProvider: FogOverlayProviding = locator.resolve(FogOverlayProviding.self)
         let locationService: LocationService = locator.resolve(LocationService.self)
         let viewModel = MapViewModel(
-            getCountryVisitMarkersUseCase: markersUseCase,
-            getNoteUseCase: getNoteUseCase,
+            getAllNotesUseCase: getAllNotesUseCase,
             fogOverlayProvider: fogOverlayProvider,
             locationService: locationService
         )

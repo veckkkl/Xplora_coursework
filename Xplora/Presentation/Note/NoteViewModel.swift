@@ -246,13 +246,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     func didRemoveLocation() {
         guard var current = draft else { return }
-        current.location = NoteLocation(
-            placeName: "",
-            city: "",
-            country: "",
-            latitude: current.location.latitude,
-            longitude: current.location.longitude
-        )
+        current.location = nil
         draft = current
         publish()
     }
@@ -285,7 +279,6 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     }
 
     private func createDraftForNewNote() {
-        let coordinate = initialCoordinate ?? LocationCoordinate(latitude: 0, longitude: 0)
         let now = Date()
         let note = Note(
             id: UUID().uuidString,
@@ -294,13 +287,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
             createdAt: now,
             updatedAt: now,
             isBookmarked: false,
-            location: NoteLocation(
-                placeName: "",
-                city: "",
-                country: "",
-                latitude: coordinate.latitude,
-                longitude: coordinate.longitude
-            ),
+            location: nil,
             photos: [],
             dateRangeText: nil,
             headerTitle: nil
@@ -314,18 +301,19 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     private func publish() {
         guard let current = draft else { return }
+        let hasLocation = current.location != nil
+        let hasLocationText = current.location?.hasDisplayableValue == true
+
         let state = NoteViewState(
             isLoading: isLoading,
             mode: mode,
             title: current.title ?? "",
             placeTitle: formatHeaderTitle(for: current),
             text: current.text,
-            locationTitle: current.location.hasDisplayableValue ? current.location.placeName : "",
-            locationSubtitle: current.location.hasDisplayableValue ? (current.location.address ?? "") : "",
-            hasLocation: current.location.hasDisplayableValue,
-            locationCoordinate: current.location.hasDisplayableValue
-                ? LocationCoordinate(latitude: current.location.latitude, longitude: current.location.longitude)
-                : nil,
+            locationTitle: hasLocationText ? (current.location?.placeName ?? "") : "",
+            locationSubtitle: hasLocationText ? (current.location?.address ?? "") : "",
+            hasLocation: hasLocation,
+            locationCoordinate: current.coordinate,
             dateText: formatDateText(for: current),
             isSaveEnabled: isSaveEnabled(for: current),
             isDeleteVisible: originalNote != nil,
@@ -340,7 +328,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     private func isSaveEnabled(for note: Note) -> Bool {
         let trimmed = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, note.location.hasDisplayableValue else { return false }
+        guard !trimmed.isEmpty else { return false }
         if let original = originalNote {
             return original != note
         }
@@ -349,7 +337,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     private func hasUnsavedChanges(_ note: Note) -> Bool {
         guard let original = originalNote else {
-            return !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || note.location.hasDisplayableValue
+            return !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || note.location != nil
         }
         return original != note
     }
