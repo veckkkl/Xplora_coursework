@@ -4,10 +4,18 @@
 //
 
 import Foundation
+import CryptoKit
+import PhotosUI
+import UIKit
 
 enum NoteViewMode {
     case view
     case edit
+}
+
+struct NotePickedPhoto {
+    let image: UIImage
+    let assetIdentifier: String?
 }
 
 struct NoteViewState: Equatable {
@@ -21,6 +29,9 @@ struct NoteViewState: Equatable {
     let hasLocation: Bool
     let locationCoordinate: LocationCoordinate?
     let dateText: String
+    let tripStartDate: Date?
+    let tripEndDate: Date?
+    let fallbackDate: Date
     let isSaveEnabled: Bool
     let isDeleteVisible: Bool
     let isBookmarked: Bool
@@ -28,6 +39,8 @@ struct NoteViewState: Equatable {
     let canSearch: Bool
     let hasUnsavedChanges: Bool
     let photoURLs: [URL]
+    let canAddPhoto: Bool
+    let preselectedAssetIdentifiers: [String]
 }
 
 @MainActor
@@ -42,10 +55,13 @@ protocol NoteViewModelInput: AnyObject {
     func didTapCancelEdit()
     func didToggleBookmark()
     func didTapSearch()
+    func didTapAddPhoto()
+    func didCapturePhoto(_ image: UIImage)
+    func didFinishPhotoLibraryPicking(results: [PHPickerResult])
     func didRemovePhoto(at index: Int)
     func didSelectLocation(placeName: String, address: String?, latitude: Double, longitude: Double)
     func didRemoveLocation()
-    func didUpdateDateRangeText(_ text: String)
+    func didUpdateTripDateRange(startDate: Date, endDate: Date)
 }
 
 @MainActor
@@ -53,6 +69,7 @@ protocol NoteViewModelOutput: AnyObject {
     var onStateChange: ((NoteViewState) -> Void)? { get set }
     var onError: ((String) -> Void)? { get set }
     var onSearchRequested: (() -> Void)? { get set }
+    var onPhotoSourceRequested: (() -> Void)? { get set }
 }
 
 @MainActor
@@ -60,12 +77,14 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     var onStateChange: ((NoteViewState) -> Void)?
     var onError: ((String) -> Void)?
     var onSearchRequested: (() -> Void)?
+    var onPhotoSourceRequested: (() -> Void)?
 
     private let noteId: String?
     private let initialCoordinate: LocationCoordinate?
     private let getNoteUseCase: GetNoteUseCase
     private let saveNoteUseCase: SaveNoteUseCase
     private let deleteNoteUseCase: DeleteNoteUseCase
+    private let photoLibrarySelectionProcessor: NotePhotoLibrarySelectionProcessing
     private weak var output: NoteModuleOutput?
     private weak var router: NoteRouter?
 
@@ -73,6 +92,8 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     private var draft: Note?
     private var mode: NoteViewMode = .view
     private var isLoading = false
+    private let maxPhotoCount = 10
+    private var pendingDeletedPhotoPaths = Set<String>()
 
     init(
         noteId: String?,
@@ -80,6 +101,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         getNoteUseCase: GetNoteUseCase,
         saveNoteUseCase: SaveNoteUseCase,
         deleteNoteUseCase: DeleteNoteUseCase,
+        photoLibrarySelectionProcessor: NotePhotoLibrarySelectionProcessing,
         output: NoteModuleOutput?,
         router: NoteRouter
     ) {
@@ -88,6 +110,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         self.getNoteUseCase = getNoteUseCase
         self.saveNoteUseCase = saveNoteUseCase
         self.deleteNoteUseCase = deleteNoteUseCase
+        self.photoLibrarySelectionProcessor = photoLibrarySelectionProcessor
         self.output = output
         self.router = router
     }
@@ -110,7 +133,8 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     func didChangeHeaderTitle(_ title: String?) {
         guard var current = draft else { return }
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        current.headerTitle = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        current.title = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        current.headerTitle = nil
         draft = current
         publish()
     }
@@ -134,16 +158,24 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         isLoading = true
         publish()
 
+        let normalizedRange = NoteDateRangeNormalizer.normalizedRange(
+            start: current.tripStartDate,
+            end: current.tripEndDate
+        )
+        current.tripStartDate = normalizedRange.start
+        current.tripEndDate = normalizedRange.end
         current.updatedAt = Date()
         Task {
             do {
                 let saved = try await saveNoteUseCase.execute(note: current)
-                originalNote = saved
-                draft = saved
+                let normalizedSaved = normalizedNote(saved)
+                finalizePendingPhotoFileDeletion(with: saved)
+                originalNote = normalizedSaved
+                draft = normalizedSaved
                 mode = .view
                 isLoading = false
                 publish()
-                output?.noteModuleDidSave(note: saved)
+                output?.noteModuleDidSave(note: normalizedSaved)
             } catch {
                 isLoading = false
                 publish()
@@ -160,6 +192,9 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         Task {
             do {
                 try await deleteNoteUseCase.execute(noteId: note.id)
+                cleanupFiles(for: note.photos)
+                clearEmptyNotesDirectory(noteId: note.id)
+                pendingDeletedPhotoPaths.removeAll()
                 isLoading = false
                 publish()
                 output?.noteModuleDidDelete(noteId: note.id)
@@ -180,10 +215,14 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     func didTapCancelEdit() {
         if let originalNote {
+            cleanupUnsavedDraftFiles(keeping: originalNote)
+            pendingDeletedPhotoPaths.removeAll()
             draft = originalNote
             mode = .view
             publish()
         } else {
+            cleanupAllDraftFiles()
+            pendingDeletedPhotoPaths.removeAll()
             router?.closeNote()
         }
     }
@@ -202,11 +241,12 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         Task {
             do {
                 let saved = try await saveNoteUseCase.execute(note: current)
-                originalNote = saved
-                draft = saved
+                let normalizedSaved = normalizedNote(saved)
+                originalNote = normalizedSaved
+                draft = normalizedSaved
                 isLoading = false
                 publish()
-                output?.noteModuleDidSave(note: saved)
+                output?.noteModuleDidSave(note: normalizedSaved)
             } catch {
                 draft = previous
                 isLoading = false
@@ -220,10 +260,158 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         onSearchRequested?()
     }
 
+    func didTapAddPhoto() {
+        guard mode == .edit else { return }
+        guard let current = draft else { return }
+        guard current.photos.count < maxPhotoCount else {
+            onError?("You can add up to \(maxPhotoCount) photos.")
+            return
+        }
+        onPhotoSourceRequested?()
+    }
+
+    func didCapturePhoto(_ image: UIImage) {
+        didAddPhotos([NotePickedPhoto(image: image, assetIdentifier: nil)])
+    }
+
+    func didFinishPhotoLibraryPicking(results: [PHPickerResult]) {
+        guard mode == .edit else { return }
+
+        let existingAssetIdentifiers = Set(draft?.photos.compactMap(\.photoLibraryAssetId) ?? [])
+        Task { [weak self] in
+            guard let self else { return }
+            let selectionResult = await self.photoLibrarySelectionProcessor.process(
+                results: results,
+                existingAssetIdentifiers: existingAssetIdentifiers
+            )
+            self.didCompletePhotoLibrarySelection(
+                selectedAssetIdentifiers: selectionResult.selectedAssetIdentifiers,
+                newlyPickedPhotos: selectionResult.newlyPickedPhotos
+            )
+        }
+    }
+
+    private func didAddPhotos(_ photos: [NotePickedPhoto]) {
+        guard mode == .edit else { return }
+        guard !photos.isEmpty else { return }
+        guard var current = draft else { return }
+
+        let normalizedExistingPhotos = normalizePhotos(current.photos)
+        var existingAssetIdentifiers = Set(normalizedExistingPhotos.compactMap(\.photoLibraryAssetId))
+        var existingHashes = Set(normalizedExistingPhotos.compactMap { fileHash(for: URL(fileURLWithPath: $0.localPath)) })
+        var addedHashes = Set<String>()
+        var updatedPhotos = normalizedExistingPhotos
+        let availableSlots = maxPhotoCount - updatedPhotos.count
+        guard availableSlots > 0 else {
+            onError?("You can add up to \(maxPhotoCount) photos.")
+            return
+        }
+
+        var addedCount = 0
+        var duplicateCount = 0
+        var failedCount = 0
+        var limitReached = false
+
+        for pickedPhoto in photos {
+            if updatedPhotos.count >= maxPhotoCount {
+                limitReached = true
+                break
+            }
+
+            if let assetIdentifier = pickedPhoto.assetIdentifier,
+               existingAssetIdentifiers.contains(assetIdentifier) {
+                duplicateCount += 1
+                continue
+            }
+
+            let image = pickedPhoto.image
+            guard let data = image.jpegData(compressionQuality: 0.82) else {
+                failedCount += 1
+                continue
+            }
+
+            let hash = sha256Hex(data)
+            if existingHashes.contains(hash) || addedHashes.contains(hash) {
+                duplicateCount += 1
+                continue
+            }
+
+            do {
+                let fileURL = try saveImageData(data, noteId: current.id)
+                let photo = NotePhoto(
+                    id: UUID().uuidString,
+                    localPath: fileURL.path,
+                    createdAt: Date(),
+                    orderIndex: updatedPhotos.count,
+                    photoLibraryAssetId: pickedPhoto.assetIdentifier
+                )
+                updatedPhotos.append(photo)
+                existingHashes.insert(hash)
+                addedHashes.insert(hash)
+                if let assetIdentifier = pickedPhoto.assetIdentifier {
+                    existingAssetIdentifiers.insert(assetIdentifier)
+                }
+                addedCount += 1
+            } catch {
+                failedCount += 1
+            }
+        }
+
+        guard addedCount > 0 else {
+            if duplicateCount > 0 {
+                onError?("This photo is already added.")
+            } else if failedCount > 0 {
+                onError?("Couldn't add photos. Please try again.")
+            }
+            return
+        }
+
+        current.photos = normalizePhotos(updatedPhotos)
+        draft = current
+        publish()
+
+        if limitReached {
+            onError?("You can add up to \(maxPhotoCount) photos.")
+        } else if duplicateCount > 0 {
+            onError?("Some photos were skipped because they are already added.")
+        } else if failedCount > 0 {
+            onError?("Some photos couldn't be added.")
+        }
+    }
+
+    private func didCompletePhotoLibrarySelection(selectedAssetIdentifiers: Set<String>, newlyPickedPhotos: [NotePickedPhoto]) {
+        guard mode == .edit else { return }
+        guard var current = draft else { return }
+
+        var photos = normalizePhotos(current.photos)
+        let removedPhotos = photos.filter { photo in
+            guard let assetIdentifier = photo.photoLibraryAssetId else { return false }
+            return !selectedAssetIdentifiers.contains(assetIdentifier)
+        }
+        if !removedPhotos.isEmpty {
+            for photo in removedPhotos {
+                handleRemovedPhotoFileLifecycle(photo: photo)
+            }
+            photos.removeAll { photo in
+                guard let assetIdentifier = photo.photoLibraryAssetId else { return false }
+                return !selectedAssetIdentifiers.contains(assetIdentifier)
+            }
+            current.photos = normalizePhotos(photos)
+            draft = current
+            publish()
+        }
+
+        guard !newlyPickedPhotos.isEmpty else { return }
+        didAddPhotos(newlyPickedPhotos)
+    }
+
     func didRemovePhoto(at index: Int) {
         guard var current = draft else { return }
-        guard current.photoURLs.indices.contains(index) else { return }
-        current.photoURLs.remove(at: index)
+        var photos = normalizePhotos(current.photos)
+        guard photos.indices.contains(index) else { return }
+        let removedPhoto = photos.remove(at: index)
+        handleRemovedPhotoFileLifecycle(photo: removedPhoto)
+        current.photos = normalizePhotos(photos)
         draft = current
         publish()
     }
@@ -232,10 +420,11 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         guard var current = draft else { return }
         let trimmedName = placeName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        let trimmedAddress = address?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let (city, country) = parseCityCountry(from: address)
         current.location = NoteLocation(
             placeName: trimmedName,
-            address: (trimmedAddress?.isEmpty ?? true) ? nil : trimmedAddress,
+            city: city,
+            country: country,
             latitude: latitude,
             longitude: longitude
         )
@@ -245,14 +434,22 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     func didRemoveLocation() {
         guard var current = draft else { return }
-        current.location = nil
+        current.location = NoteLocation(
+            placeName: "",
+            city: "",
+            country: "",
+            latitude: current.location.latitude,
+            longitude: current.location.longitude
+        )
         draft = current
         publish()
     }
 
-    func didUpdateDateRangeText(_ text: String) {
+    func didUpdateTripDateRange(startDate: Date, endDate: Date) {
         guard var current = draft else { return }
-        current.dateRangeText = text
+        let normalizedRange = NoteDateRangeNormalizer.normalizedRange(start: startDate, end: endDate)
+        current.tripStartDate = normalizedRange.start
+        current.tripEndDate = normalizedRange.end
         draft = current
         publish()
     }
@@ -264,8 +461,9 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         Task {
             do {
                 let note = try await getNoteUseCase.execute(id: id)
-                originalNote = note
-                draft = note
+                let normalizedNote = normalizedNote(note)
+                originalNote = normalizedNote
+                draft = normalizedNote
                 mode = .view
                 isLoading = false
                 publish()
@@ -282,17 +480,21 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         let now = Date()
         let note = Note(
             id: UUID().uuidString,
-            coordinate: coordinate,
             title: nil,
             text: "",
-            photoURLs: [],
             createdAt: now,
             updatedAt: now,
-            city: nil,
-            country: nil,
-            location: nil,
+            tripStartDate: nil,
+            tripEndDate: nil,
             isBookmarked: false,
-            dateRangeText: nil,
+            location: NoteLocation(
+                placeName: "",
+                city: "",
+                country: "",
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            ),
+            photos: [],
             headerTitle: nil
         )
         originalNote = nil
@@ -304,33 +506,43 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     private func publish() {
         guard let current = draft else { return }
+        let normalizedRange = effectiveDateRange(for: current)
+        let orderedPhotos = normalizePhotos(current.photos)
+        let photoURLs = orderedPhotos.map { URL(fileURLWithPath: $0.localPath) }
+        let preselectedAssetIdentifiers = orderedPhotos.compactMap(\.photoLibraryAssetId)
         let state = NoteViewState(
             isLoading: isLoading,
             mode: mode,
             title: current.title ?? "",
             placeTitle: formatHeaderTitle(for: current),
             text: current.text,
-            locationTitle: current.location?.placeName ?? "",
-            locationSubtitle: current.location?.address ?? "",
-            hasLocation: current.location != nil,
-            locationCoordinate: current.location.map {
-                LocationCoordinate(latitude: $0.latitude, longitude: $0.longitude)
-            },
+            locationTitle: current.location.hasDisplayableValue ? current.location.placeName : "",
+            locationSubtitle: current.location.hasDisplayableValue ? (current.location.address ?? "") : "",
+            hasLocation: current.location.hasDisplayableValue,
+            locationCoordinate: current.location.hasDisplayableValue
+                ? LocationCoordinate(latitude: current.location.latitude, longitude: current.location.longitude)
+                : nil,
             dateText: formatDateText(for: current),
+            tripStartDate: normalizedRange.start,
+            tripEndDate: normalizedRange.end,
+            fallbackDate: current.createdAt,
             isSaveEnabled: isSaveEnabled(for: current),
             isDeleteVisible: originalNote != nil,
             isBookmarked: current.isBookmarked,
             canToggleBookmark: originalNote != nil,
             canSearch: !current.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             hasUnsavedChanges: hasUnsavedChanges(current),
-            photoURLs: current.photoURLs
+            photoURLs: photoURLs,
+            canAddPhoto: mode == .edit && orderedPhotos.count < maxPhotoCount,
+            preselectedAssetIdentifiers: preselectedAssetIdentifiers
         )
         onStateChange?(state)
     }
 
     private func isSaveEnabled(for note: Note) -> Bool {
+        let trimmedTitle = (note.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmed = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
+        guard !trimmedTitle.isEmpty, !trimmed.isEmpty, note.location.hasDisplayableValue else { return false }
         if let original = originalNote {
             return original != note
         }
@@ -339,35 +551,168 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     private func hasUnsavedChanges(_ note: Note) -> Bool {
         guard let original = originalNote else {
-            return !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let hasTitle = !(note.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return hasTitle
+                || !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || note.location.hasDisplayableValue
+                || !note.photos.isEmpty
+                || note.tripStartDate != nil
+                || note.tripEndDate != nil
         }
         return original != note
     }
 
     private func formatHeaderTitle(for note: Note) -> String {
-        if let override = note.headerTitle, !override.isEmpty {
-            return override
-        }
-        if let city = note.city, let country = note.country {
-            return "\(city), \(country)"
-        }
-        if let country = note.country {
-            return country
+        if let title = note.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            return title
         }
         return "Untitled"
     }
 
-    private func formatDateText(for note: Note) -> String {
-        if let range = note.dateRangeText, !range.isEmpty {
-            return range
+    private func parseCityCountry(from address: String?) -> (String, String) {
+        let trimmed = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return ("", "") }
+        let parts = trimmed
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if parts.count >= 2 {
+            return (parts[parts.count - 2], parts[parts.count - 1])
         }
-        return NoteViewModel.dateFormatter.string(from: note.updatedAt)
+
+        return (parts.first ?? "", "")
     }
 
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
+    private func formatDateText(for note: Note) -> String {
+        let resolvedRange = NoteDateRangeResolver.effectiveRange(
+            tripStartDate: note.tripStartDate,
+            tripEndDate: note.tripEndDate
+        )
+        if let start = resolvedRange.start, let end = resolvedRange.end {
+            return NoteDateRangeFormatter.displayText(startDate: start, endDate: end)
+        }
+        return NoteDateRangeFormatter.displayText(for: note.createdAt)
+    }
+
+    private func effectiveDateRange(for note: Note) -> (start: Date?, end: Date?) {
+        NoteDateRangeResolver.effectiveRange(
+            tripStartDate: note.tripStartDate,
+            tripEndDate: note.tripEndDate
+        )
+    }
+
+    private func normalizedNote(_ note: Note) -> Note {
+        var mutableNote = note
+        let normalizedRange = effectiveDateRange(for: note)
+        mutableNote.tripStartDate = normalizedRange.start
+        mutableNote.tripEndDate = normalizedRange.end
+        return mutableNote
+    }
+
+    private func saveImageData(_ data: Data, noteId: String) throws -> URL {
+        let directoryURL = try notesDirectoryURL(noteId: noteId)
+        if !FileManager.default.fileExists(atPath: directoryURL.path) {
+            try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        }
+
+        let fileURL = directoryURL.appendingPathComponent("\(UUID().uuidString).jpg")
+        try data.write(to: fileURL, options: .atomic)
+        return fileURL
+    }
+
+    private func handleRemovedPhotoFileLifecycle(photo: NotePhoto) {
+        let wasPersistedInOriginal = originalNote?.photos.contains(where: { $0.id == photo.id }) ?? false
+        if wasPersistedInOriginal {
+            pendingDeletedPhotoPaths.insert(photo.localPath)
+        } else {
+            removeFile(at: photo.localPath)
+        }
+    }
+
+    private func finalizePendingPhotoFileDeletion(with saved: Note) {
+        let retainedPaths = Set(saved.photos.map(\.localPath))
+        for path in pendingDeletedPhotoPaths where !retainedPaths.contains(path) {
+            removeFile(at: path)
+        }
+        pendingDeletedPhotoPaths.removeAll()
+    }
+
+    private func cleanupUnsavedDraftFiles(keeping original: Note) {
+        guard let currentDraft = draft else { return }
+        let originalPhotoIDs = Set(original.photos.map(\.id))
+        for photo in currentDraft.photos where !originalPhotoIDs.contains(photo.id) {
+            removeFile(at: photo.localPath)
+        }
+    }
+
+    private func cleanupAllDraftFiles() {
+        guard let currentDraft = draft else { return }
+        cleanupFiles(for: currentDraft.photos)
+        clearEmptyNotesDirectory(noteId: currentDraft.id)
+    }
+
+    private func cleanupFiles(for photos: [NotePhoto]) {
+        for photo in photos {
+            removeFile(at: photo.localPath)
+        }
+    }
+
+    private func removeFile(at localPath: String) {
+        let url = URL(fileURLWithPath: localPath)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    private func clearEmptyNotesDirectory(noteId: String) {
+        guard let directoryURL = try? notesDirectoryURL(noteId: noteId) else { return }
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: directoryURL.path) else { return }
+        guard contents.isEmpty else { return }
+        try? FileManager.default.removeItem(at: directoryURL)
+    }
+
+    private func notesDirectoryURL(noteId: String) throws -> URL {
+        let baseDirectory = try applicationSupportDirectoryURL()
+        return baseDirectory
+            .appendingPathComponent("Notes", isDirectory: true)
+            .appendingPathComponent(noteId, isDirectory: true)
+    }
+
+    private func applicationSupportDirectoryURL() throws -> URL {
+        guard let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw NSError(domain: "NoteViewModel", code: 1)
+        }
+
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        return url
+    }
+
+    private func fileHash(for url: URL) -> String? {
+        guard url.isFileURL else { return nil }
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return sha256Hex(data)
+    }
+
+    private func sha256Hex(_ data: Data) -> String {
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func normalizePhotos(_ photos: [NotePhoto]) -> [NotePhoto] {
+        photos
+            .sorted { lhs, rhs in
+                if lhs.orderIndex == rhs.orderIndex {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                return lhs.orderIndex < rhs.orderIndex
+            }
+            .enumerated()
+            .map { index, photo in
+                var mutablePhoto = photo
+                mutablePhoto.orderIndex = index
+                return mutablePhoto
+            }
+    }
 }
