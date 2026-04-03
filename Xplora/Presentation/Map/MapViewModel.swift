@@ -71,20 +71,28 @@ final class MapViewModel: MapViewModelInput, MapViewModelOutput {
 
     func previewModel(for marker: CountryVisitMarker) -> TripNotePreviewViewModel {
         let note = marker.firstNoteId.flatMap { cachedNotesById[$0] }
+        let trimmedTitle = note?.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let markerTitle = marker.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previewTitle = !trimmedTitle.isEmpty ? trimmedTitle : (!markerTitle.isEmpty ? markerTitle : "Untitled")
         let formattedDateRange = note.map { NotePresentationFactory.formattedDateRange(for: $0) } ?? marker.dateRangeText
+        let locationTitle = note?.location?.hasDisplayableValue == true ? note?.location?.placeName : nil
+        let locationSubtitle = note?.location?.address?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let locationChipText = locationTitle ?? ((locationSubtitle?.isEmpty == false) ? locationSubtitle : nil) ?? (markerTitle.isEmpty ? nil : markerTitle)
+        let previewText = note
+            .map { NotePresentationFactory.textPreview(for: $0) }
+            .flatMap { $0.isEmpty ? nil : $0 }
+            ?? "Open note to see details."
+
         return TripNotePreviewViewModel(
-            title: note.map { NotePresentationFactory.title(for: $0) } ?? marker.title,
+            title: previewTitle,
             dateRange: formattedDateRange,
             photoURLs: note?.photoURLs ?? [],
             photoOverflowCount: NotePresentationFactory.previewOverflowCount(photoCount: note?.photoURLs.count ?? 0),
             isBookmarked: note?.isBookmarked ?? false,
-            locationTitle: note.flatMap { NotePresentationFactory.locationTitle(for: $0) },
-            locationSubtitle: note.flatMap { NotePresentationFactory.locationSubtitle(for: $0) },
-            locationChipText: note.flatMap { NotePresentationFactory.locationChipText(for: $0) } ?? marker.title,
-            textPreview: note
-                .map { NotePresentationFactory.textPreview(for: $0) }
-                .flatMap { $0.isEmpty ? nil : $0 }
-                ?? "Open note to see details."
+            locationTitle: locationTitle,
+            locationSubtitle: locationSubtitle,
+            locationChipText: locationChipText,
+            textPreview: previewText
         )
     }
 

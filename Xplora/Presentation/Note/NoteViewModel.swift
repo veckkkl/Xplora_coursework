@@ -554,10 +554,8 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     }
 
     private func formatHeaderTitle(for note: Note) -> String {
-        if let title = note.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
-            return title
-        }
-        return "Untitled"
+        let trimmedTitle = note.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmedTitle.isEmpty ? "Untitled" : trimmedTitle
     }
 
     private func parseCityCountry(from address: String?) -> (String, String) {

@@ -94,8 +94,7 @@ final class NotesListViewModel: NotesListViewModelInput, NotesListViewModelOutpu
     private func publish() {
         let items = notes.map { note in
             let titleText = note.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let locationTitle = note.location?.placeName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let resolvedTitle = !titleText.isEmpty ? titleText : (!locationTitle.isEmpty ? locationTitle : "Untitled")
+            let resolvedTitle = titleText.isEmpty ? "Untitled" : titleText
 
             let trimmedText = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
             let textPreview = trimmedText.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
@@ -111,6 +110,7 @@ final class NotesListViewModel: NotesListViewModelInput, NotesListViewModelOutpu
                 dateText = NoteDateRangeFormatter.displayText(for: note.createdAt)
             }
 
+            let locationTitle = note.location?.placeName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let locationChipText: String? = {
                 if !locationTitle.isEmpty { return locationTitle }
                 let address = note.location?.address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
