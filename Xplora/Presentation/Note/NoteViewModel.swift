@@ -34,7 +34,6 @@ struct NoteViewState: Equatable {
 protocol NoteViewModelInput: AnyObject {
     func viewDidLoad()
     func didChangeTitle(_ title: String?)
-    func didChangeHeaderTitle(_ title: String?)
     func didChangeText(_ text: String)
     func didTapSave()
     func didTapDeleteConfirmed()
@@ -103,14 +102,6 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     func didChangeTitle(_ title: String?) {
         guard var current = draft else { return }
         current.title = title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        draft = current
-        publish()
-    }
-
-    func didChangeHeaderTitle(_ title: String?) {
-        guard var current = draft else { return }
-        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        current.headerTitle = (trimmed?.isEmpty ?? true) ? nil : trimmed
         draft = current
         publish()
     }
@@ -232,10 +223,11 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         guard var current = draft else { return }
         let trimmedName = placeName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        let trimmedAddress = address?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let (city, country) = parseCityCountry(from: address)
         current.location = NoteLocation(
             placeName: trimmedName,
-            address: (trimmedAddress?.isEmpty ?? true) ? nil : trimmedAddress,
+            city: city,
+            country: country,
             latitude: latitude,
             longitude: longitude
         )
@@ -278,22 +270,17 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     }
 
     private func createDraftForNewNote() {
-        let coordinate = initialCoordinate ?? LocationCoordinate(latitude: 0, longitude: 0)
         let now = Date()
         let note = Note(
             id: UUID().uuidString,
-            coordinate: coordinate,
             title: nil,
             text: "",
-            photoURLs: [],
             createdAt: now,
             updatedAt: now,
-            city: nil,
-            country: nil,
-            location: nil,
             isBookmarked: false,
-            dateRangeText: nil,
-            headerTitle: nil
+            location: nil,
+            photos: [],
+            dateRangeText: nil
         )
         originalNote = nil
         draft = note
@@ -304,18 +291,19 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     private func publish() {
         guard let current = draft else { return }
+        let hasLocation = current.location != nil
+        let hasLocationText = current.location?.hasDisplayableValue == true
+
         let state = NoteViewState(
             isLoading: isLoading,
             mode: mode,
             title: current.title ?? "",
-            placeTitle: formatHeaderTitle(for: current),
+            placeTitle: NotePresentationTitle.displayTitle(from: current.title),
             text: current.text,
-            locationTitle: current.location?.placeName ?? "",
-            locationSubtitle: current.location?.address ?? "",
-            hasLocation: current.location != nil,
-            locationCoordinate: current.location.map {
-                LocationCoordinate(latitude: $0.latitude, longitude: $0.longitude)
-            },
+            locationTitle: hasLocationText ? (current.location?.placeName ?? "") : "",
+            locationSubtitle: hasLocationText ? (current.location?.address ?? "") : "",
+            hasLocation: hasLocation,
+            locationCoordinate: current.coordinate,
             dateText: formatDateText(for: current),
             isSaveEnabled: isSaveEnabled(for: current),
             isDeleteVisible: originalNote != nil,
@@ -339,22 +327,24 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     private func hasUnsavedChanges(_ note: Note) -> Bool {
         guard let original = originalNote else {
-            return !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || note.location != nil
         }
         return original != note
     }
 
-    private func formatHeaderTitle(for note: Note) -> String {
-        if let override = note.headerTitle, !override.isEmpty {
-            return override
+    private func parseCityCountry(from address: String?) -> (String, String) {
+        let trimmed = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return ("", "") }
+        let parts = trimmed
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if parts.count >= 2 {
+            return (parts[parts.count - 2], parts[parts.count - 1])
         }
-        if let city = note.city, let country = note.country {
-            return "\(city), \(country)"
-        }
-        if let country = note.country {
-            return country
-        }
-        return "Untitled"
+
+        return (parts.first ?? "", "")
     }
 
     private func formatDateText(for note: Note) -> String {

@@ -20,7 +20,6 @@ final class NoteViewController: UIViewController {
     private let placeTitleLabel = UILabel()
     private let placeTitleBookmarkImageView = UIImageView()
     private let headerTitleTextField = UITextField()
-    private let titleTextField = UITextField()
     private let dateLabel = UILabel()
     private let separatorAboveDate = UIView()
     private let separatorAboveText = UIView()
@@ -119,16 +118,11 @@ final class NoteViewController: UIViewController {
         placeTitleBookmarkImageView.isHidden = true
         placeTitleBookmarkImageView.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        headerTitleTextField.placeholder = "Location"
+        headerTitleTextField.placeholder = "Title"
         headerTitleTextField.borderStyle = .none
         headerTitleTextField.backgroundColor = .clear
         headerTitleTextField.font = UIFont.systemFont(ofSize: 28, weight: .bold)
         headerTitleTextField.textColor = .label
-
-        titleTextField.placeholder = "Title"
-        titleTextField.borderStyle = .none
-        titleTextField.backgroundColor = .clear
-        titleTextField.font = UIFont.systemFont(ofSize: 16, weight: .medium)
 
         dateLabel.font = UIFont.systemFont(ofSize: 14, weight: .bold)
         dateLabel.textColor = .secondaryLabel
@@ -168,7 +162,6 @@ final class NoteViewController: UIViewController {
         stackView.addArrangedSubview(headerTitleTextField)
         stackView.addArrangedSubview(photoSectionView)
         stackView.addArrangedSubview(locationSectionView)
-        stackView.addArrangedSubview(titleTextField)
         stackView.addArrangedSubview(separatorAboveDate)
         stackView.addArrangedSubview(dateLabel)
         stackView.addArrangedSubview(separatorAboveText)
@@ -213,8 +206,7 @@ final class NoteViewController: UIViewController {
     }
 
     private func setupActions() {
-        titleTextField.addTarget(self, action: #selector(titleDidChange), for: .editingChanged)
-        headerTitleTextField.addTarget(self, action: #selector(headerTitleDidChange), for: .editingChanged)
+        headerTitleTextField.addTarget(self, action: #selector(titleDidChange), for: .editingChanged)
 
         photoSectionView.onRemovePhoto = { [weak self] index in
             self?.viewModel.didRemovePhoto(at: index)
@@ -361,14 +353,10 @@ final class NoteViewController: UIViewController {
     private func apply(state: NoteViewState) {
         lastState = state
 
-        if titleTextField.text != state.title, !titleTextField.isFirstResponder {
-            titleTextField.text = state.title
-        }
-
         placeTitleLabel.text = state.placeTitle
         placeTitleBookmarkImageView.isHidden = !state.isBookmarked
-        if headerTitleTextField.text != state.placeTitle, !headerTitleTextField.isFirstResponder {
-            headerTitleTextField.text = state.placeTitle
+        if headerTitleTextField.text != state.title, !headerTitleTextField.isFirstResponder {
+            headerTitleTextField.text = state.title
         }
         dateLabel.text = state.dateText
         photoSectionView.configure(.init(photoURLs: state.photoURLs, isEditing: state.mode == .edit))
@@ -382,8 +370,6 @@ final class NoteViewController: UIViewController {
         )
 
         let isEditing = state.mode == .edit
-        titleTextField.isHidden = true
-        titleTextField.isEnabled = false
         placeTitleRow.isHidden = isEditing
         headerTitleTextField.isHidden = !isEditing
         headerTitleTextField.isEnabled = isEditing
@@ -547,11 +533,7 @@ final class NoteViewController: UIViewController {
     }
 
     @objc private func titleDidChange() {
-        viewModel.didChangeTitle(titleTextField.text)
-    }
-
-    @objc private func headerTitleDidChange() {
-        viewModel.didChangeHeaderTitle(headerTitleTextField.text)
+        viewModel.didChangeTitle(headerTitleTextField.text)
     }
 
     @objc private func didTapText() {

@@ -29,18 +29,17 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private func configureDependencies() {
         let locator = ServiceLocator.shared
         let storage: LocalStorageProtocol = LocalStorage()
+        let coreDataStack = CoreDataStack()
 
         // Repositories
         let tripsRepo: TripsRepo = TripsRepoImpl(storage: storage)
         let placesRepo: PlacesRepo = PlacesRepoImpl(storage: storage)
         let settingsRepo: SettingsRepo = SettingsRepoImpl(storage: storage)
-        let markersRepo: CountryVisitMarkersRepo = CountryVisitMarkersRepoImpl()
-        let notesRepo: NotesRepo = NotesRepoImpl()
+        let notesRepo: NotesRepo = NotesRepoImpl(coreDataStack: coreDataStack)
 
         locator.register(TripsRepo.self, instance: tripsRepo)
         locator.register(PlacesRepo.self, instance: placesRepo)
         locator.register(SettingsRepo.self, instance: settingsRepo)
-        locator.register(CountryVisitMarkersRepo.self, instance: markersRepo)
         locator.register(NotesRepo.self, instance: notesRepo)
 
         // Services
@@ -62,19 +61,17 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let addVisitedPlaceUseCase: AddVisitedPlaceUseCase =
             AddVisitedPlaceUseCaseImpl(placesRepo: placesRepo)
 
-        let getCountryVisitMarkersUseCase: GetCountryVisitMarkersUseCase =
-            GetCountryVisitMarkersUseCaseImpl(markersRepo: markersRepo)
-
         locator.register(GetVisitedCountriesUseCase.self, instance: getVisitedCountriesUseCase)
         locator.register(GetTripsTimelineUseCase.self, instance: getTripsTimelineUseCase)
         locator.register(AddVisitedPlaceUseCase.self, instance: addVisitedPlaceUseCase)
-        locator.register(GetCountryVisitMarkersUseCase.self, instance: getCountryVisitMarkersUseCase)
 
         let getNoteUseCase: GetNoteUseCase = GetNoteUseCaseImpl(notesRepo: notesRepo)
+        let getAllNotesUseCase: GetAllNotesUseCase = GetAllNotesUseCaseImpl(notesRepo: notesRepo)
         let saveNoteUseCase: SaveNoteUseCase = SaveNoteUseCaseImpl(notesRepo: notesRepo)
         let deleteNoteUseCase: DeleteNoteUseCase = DeleteNoteUseCaseImpl(notesRepo: notesRepo)
 
         locator.register(GetNoteUseCase.self, instance: getNoteUseCase)
+        locator.register(GetAllNotesUseCase.self, instance: getAllNotesUseCase)
         locator.register(SaveNoteUseCase.self, instance: saveNoteUseCase)
         locator.register(DeleteNoteUseCase.self, instance: deleteNoteUseCase)
     }
@@ -103,4 +100,3 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // to restore the scene back to its current state.
     }
 }
-
