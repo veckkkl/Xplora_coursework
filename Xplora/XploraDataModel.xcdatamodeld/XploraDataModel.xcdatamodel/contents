@@ -9,11 +9,11 @@
         <attribute name="tripStartDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="tripEndDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="isBookmarked" optional="NO" attributeType="Boolean" usesScalarValueType="YES" defaultValueString="NO"/>
-        <attribute name="placeName" optional="NO" attributeType="String" defaultValueString=""/>
-        <attribute name="city" optional="NO" attributeType="String" defaultValueString=""/>
-        <attribute name="country" optional="NO" attributeType="String" defaultValueString=""/>
-        <attribute name="latitude" optional="NO" attributeType="Double" usesScalarValueType="YES" defaultValueString="0.0"/>
-        <attribute name="longitude" optional="NO" attributeType="Double" usesScalarValueType="YES" defaultValueString="0.0"/>
+        <attribute name="placeName" optional="YES" attributeType="String"/>
+        <attribute name="city" optional="YES" attributeType="String"/>
+        <attribute name="country" optional="YES" attributeType="String"/>
+        <attribute name="latitude" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
+        <attribute name="longitude" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
         <relationship name="photos" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDNotePhoto" inverseName="note" inverseEntity="CDNotePhoto"/>
     </entity>
     <entity name="CDNotePhoto" representedClassName="CDNotePhoto" syncable="YES" codeGenerationType="class">

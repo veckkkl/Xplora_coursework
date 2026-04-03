@@ -93,12 +93,36 @@ final class NotesListViewModel: NotesListViewModelInput, NotesListViewModelOutpu
 
     private func publish() {
         let items = notes.map { note in
-            NotesListItemViewState(
+            let titleText = note.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let locationTitle = note.location?.placeName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let resolvedTitle = !titleText.isEmpty ? titleText : (!locationTitle.isEmpty ? locationTitle : "Untitled")
+
+            let trimmedText = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let textPreview = trimmedText.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+
+            let resolvedRange = NoteDateRangeResolver.effectiveRange(
+                tripStartDate: note.tripStartDate,
+                tripEndDate: note.tripEndDate
+            )
+            let dateText: String
+            if let start = resolvedRange.start, let end = resolvedRange.end {
+                dateText = NoteDateRangeFormatter.displayText(startDate: start, endDate: end)
+            } else {
+                dateText = NoteDateRangeFormatter.displayText(for: note.createdAt)
+            }
+
+            let locationChipText: String? = {
+                if !locationTitle.isEmpty { return locationTitle }
+                let address = note.location?.address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return address.isEmpty ? nil : address
+            }()
+
+            return NotesListItemViewState(
                 id: note.id,
-                title: NotePresentationFactory.title(for: note),
-                textPreview: NotePresentationFactory.textPreview(for: note),
-                dateText: NotePresentationFactory.formattedDateRange(for: note),
-                locationChipText: NotePresentationFactory.locationChipText(for: note),
+                title: resolvedTitle,
+                textPreview: textPreview,
+                dateText: dateText,
+                locationChipText: locationChipText,
                 isBookmarked: note.isBookmarked,
                 photoURLs: note.photoURLs
             )

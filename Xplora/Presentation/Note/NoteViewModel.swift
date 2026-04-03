@@ -434,13 +434,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     func didRemoveLocation() {
         guard var current = draft else { return }
-        current.location = NoteLocation(
-            placeName: "",
-            city: "",
-            country: "",
-            latitude: current.location.latitude,
-            longitude: current.location.longitude
-        )
+        current.location = nil
         draft = current
         publish()
     }
@@ -476,7 +470,6 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     }
 
     private func createDraftForNewNote() {
-        let coordinate = initialCoordinate ?? LocationCoordinate(latitude: 0, longitude: 0)
         let now = Date()
         let note = Note(
             id: UUID().uuidString,
@@ -487,13 +480,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
             tripStartDate: nil,
             tripEndDate: nil,
             isBookmarked: false,
-            location: NoteLocation(
-                placeName: "",
-                city: "",
-                country: "",
-                latitude: coordinate.latitude,
-                longitude: coordinate.longitude
-            ),
+            location: nil,
             photos: [],
             headerTitle: nil
         )
@@ -510,18 +497,18 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         let orderedPhotos = normalizePhotos(current.photos)
         let photoURLs = orderedPhotos.map { URL(fileURLWithPath: $0.localPath) }
         let preselectedAssetIdentifiers = orderedPhotos.compactMap(\.photoLibraryAssetId)
+        let hasLocationText = current.location?.hasDisplayableValue == true
+        let locationCoordinate = hasLocationText ? current.coordinate : nil
         let state = NoteViewState(
             isLoading: isLoading,
             mode: mode,
             title: current.title ?? "",
             placeTitle: formatHeaderTitle(for: current),
             text: current.text,
-            locationTitle: current.location.hasDisplayableValue ? current.location.placeName : "",
-            locationSubtitle: current.location.hasDisplayableValue ? (current.location.address ?? "") : "",
-            hasLocation: current.location.hasDisplayableValue,
-            locationCoordinate: current.location.hasDisplayableValue
-                ? LocationCoordinate(latitude: current.location.latitude, longitude: current.location.longitude)
-                : nil,
+            locationTitle: hasLocationText ? (current.location?.placeName ?? "") : "",
+            locationSubtitle: hasLocationText ? (current.location?.address ?? "") : "",
+            hasLocation: hasLocationText,
+            locationCoordinate: locationCoordinate,
             dateText: formatDateText(for: current),
             tripStartDate: normalizedRange.start,
             tripEndDate: normalizedRange.end,
@@ -540,9 +527,13 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     }
 
     private func isSaveEnabled(for note: Note) -> Bool {
-        let trimmedTitle = (note.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmed = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty, !trimmed.isEmpty, note.location.hasDisplayableValue else { return false }
+        let hasTitle = !(note.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasText = !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasLocation = note.location?.hasDisplayableValue == true
+        let hasPhotos = !note.photos.isEmpty
+        let hasDateRange = note.tripStartDate != nil || note.tripEndDate != nil
+
+        guard hasTitle || hasText || hasLocation || hasPhotos || hasDateRange else { return false }
         if let original = originalNote {
             return original != note
         }
@@ -554,7 +545,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
             let hasTitle = !(note.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             return hasTitle
                 || !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || note.location.hasDisplayableValue
+                || note.location?.hasDisplayableValue == true
                 || !note.photos.isEmpty
                 || note.tripStartDate != nil
                 || note.tripEndDate != nil

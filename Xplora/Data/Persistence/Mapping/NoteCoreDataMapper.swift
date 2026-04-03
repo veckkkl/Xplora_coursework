@@ -30,13 +30,7 @@ enum NoteCoreDataMapper {
             tripStartDate: managedObject.tripStartDate,
             tripEndDate: managedObject.tripEndDate,
             isBookmarked: managedObject.isBookmarked,
-            location: NoteLocation(
-                placeName: managedObject.placeName ?? "",
-                city: managedObject.city ?? "",
-                country: managedObject.country ?? "",
-                latitude: managedObject.latitude,
-                longitude: managedObject.longitude
-            ),
+            location: domainLocation(from: managedObject),
             photos: mappedPhotos,
             headerTitle: nil
         )
@@ -51,11 +45,19 @@ enum NoteCoreDataMapper {
         managedObject.tripStartDate = note.tripStartDate
         managedObject.tripEndDate = note.tripEndDate
         managedObject.isBookmarked = note.isBookmarked
-        managedObject.placeName = note.location.placeName
-        managedObject.city = note.location.city
-        managedObject.country = note.location.country
-        managedObject.latitude = note.location.latitude
-        managedObject.longitude = note.location.longitude
+        if let location = note.location {
+            managedObject.placeName = location.placeName
+            managedObject.city = location.city
+            managedObject.country = location.country
+            managedObject.setValue(location.latitude, forKey: #keyPath(CDNote.latitude))
+            managedObject.setValue(location.longitude, forKey: #keyPath(CDNote.longitude))
+        } else {
+            managedObject.placeName = nil
+            managedObject.city = nil
+            managedObject.country = nil
+            managedObject.setValue(nil, forKey: #keyPath(CDNote.latitude))
+            managedObject.setValue(nil, forKey: #keyPath(CDNote.longitude))
+        }
 
         let photosSet = managedObject.photos as? Set<CDNotePhoto> ?? []
         let existingPhotos: [String: CDNotePhoto] = Dictionary(uniqueKeysWithValues: photosSet.compactMap { photo in
@@ -81,5 +83,39 @@ enum NoteCoreDataMapper {
         }
 
         managedObject.photos = NSSet(set: updatedPhotos)
+    }
+
+    private static func domainLocation(from managedObject: CDNote) -> NoteLocation? {
+        let placeName = (managedObject.placeName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let city = (managedObject.city ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let country = (managedObject.country ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let latitude = doubleValue(for: #keyPath(CDNote.latitude), in: managedObject)
+        let longitude = doubleValue(for: #keyPath(CDNote.longitude), in: managedObject)
+
+        guard let latitude, let longitude else { return nil }
+        let hasAnyText = !placeName.isEmpty || !city.isEmpty || !country.isEmpty
+        guard hasAnyText || latitude != 0 || longitude != 0 else { return nil }
+
+        return NoteLocation(
+            placeName: placeName,
+            city: city,
+            country: country,
+            latitude: latitude,
+            longitude: longitude
+        )
+    }
+
+    private static func doubleValue(for keyPath: String, in managedObject: CDNote) -> Double? {
+        let rawValue = managedObject.value(forKey: keyPath)
+
+        if let number = rawValue as? NSNumber {
+            return number.doubleValue
+        }
+
+        if let double = rawValue as? Double {
+            return double
+        }
+
+        return nil
     }
 }

@@ -71,14 +71,15 @@ struct Note: Identifiable, Equatable {
     var tripStartDate: Date?
     var tripEndDate: Date?
     var isBookmarked: Bool
-    var location: NoteLocation
+    var location: NoteLocation?
     var photos: [NotePhoto]
 
     // Temporary UI-compatibility fields that are not part of persistence core.
     var headerTitle: String?
 
-    var coordinate: LocationCoordinate {
-        LocationCoordinate(latitude: location.latitude, longitude: location.longitude)
+    var coordinate: LocationCoordinate? {
+        guard let location else { return nil }
+        return LocationCoordinate(latitude: location.latitude, longitude: location.longitude)
     }
 
     var photoURLs: [URL] {
@@ -102,21 +103,27 @@ struct Note: Identifiable, Equatable {
 
     var city: String? {
         get {
+            guard let location else { return nil }
             let trimmed = location.city.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed
         }
         set {
+            guard var location else { return }
             location.city = newValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            self.location = location
         }
     }
 
     var country: String? {
         get {
+            guard let location else { return nil }
             let trimmed = location.country.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed
         }
         set {
+            guard var location else { return }
             location.country = newValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            self.location = location
         }
     }
 }
