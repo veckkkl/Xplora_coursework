@@ -71,9 +71,8 @@ final class MapViewModel: MapViewModelInput, MapViewModelOutput {
 
     func previewModel(for marker: CountryVisitMarker) -> TripNotePreviewViewModel {
         let note = marker.firstNoteId.flatMap { cachedNotesById[$0] }
-        let trimmedTitle = note?.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let previewTitle = NotePresentationTitle.displayTitle(from: note?.title)
         let markerTitle = marker.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let previewTitle = !trimmedTitle.isEmpty ? trimmedTitle : (!markerTitle.isEmpty ? markerTitle : "Untitled")
         let formattedDateRange = note.map { NotePresentationFactory.formattedDateRange(for: $0) } ?? marker.dateRangeText
         let locationTitle = note?.location?.hasDisplayableValue == true ? note?.location?.placeName : nil
         let locationSubtitle = note?.location?.address?.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -47,7 +47,6 @@ struct NoteViewState: Equatable {
 protocol NoteViewModelInput: AnyObject {
     func viewDidLoad()
     func didChangeTitle(_ title: String?)
-    func didChangeHeaderTitle(_ title: String?)
     func didChangeText(_ text: String)
     func didTapSave()
     func didTapDeleteConfirmed()
@@ -126,15 +125,6 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
     func didChangeTitle(_ title: String?) {
         guard var current = draft else { return }
         current.title = title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        draft = current
-        publish()
-    }
-
-    func didChangeHeaderTitle(_ title: String?) {
-        guard var current = draft else { return }
-        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        current.title = (trimmed?.isEmpty ?? true) ? nil : trimmed
-        current.headerTitle = nil
         draft = current
         publish()
     }
@@ -503,7 +493,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
             isLoading: isLoading,
             mode: mode,
             title: current.title ?? "",
-            placeTitle: formatHeaderTitle(for: current),
+            placeTitle: NotePresentationTitle.displayTitle(from: current.title),
             text: current.text,
             locationTitle: hasLocationText ? (current.location?.placeName ?? "") : "",
             locationSubtitle: hasLocationText ? (current.location?.address ?? "") : "",
@@ -551,11 +541,6 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
                 || note.tripEndDate != nil
         }
         return original != note
-    }
-
-    private func formatHeaderTitle(for note: Note) -> String {
-        let trimmedTitle = note.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmedTitle.isEmpty ? "Untitled" : trimmedTitle
     }
 
     private func parseCityCountry(from address: String?) -> (String, String) {

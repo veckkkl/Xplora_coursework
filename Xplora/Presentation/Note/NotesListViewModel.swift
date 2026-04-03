@@ -93,8 +93,7 @@ final class NotesListViewModel: NotesListViewModelInput, NotesListViewModelOutpu
 
     private func publish() {
         let items = notes.map { note in
-            let titleText = note.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let resolvedTitle = titleText.isEmpty ? "Untitled" : titleText
+            let resolvedTitle = NotePresentationTitle.displayTitle(from: note.title)
 
             let trimmedText = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
             let textPreview = trimmedText.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)

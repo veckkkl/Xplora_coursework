@@ -202,7 +202,7 @@ final class NoteViewController: UIViewController {
     }
 
     private func setupActions() {
-        headerTitleTextField.addTarget(self, action: #selector(headerTitleDidChange), for: .editingChanged)
+        headerTitleTextField.addTarget(self, action: #selector(titleDidChange), for: .editingChanged)
         let headerTitleTap = UITapGestureRecognizer(target: self, action: #selector(didTapHeaderTitle))
         headerTitleTextField.addGestureRecognizer(headerTitleTap)
 
@@ -553,7 +553,7 @@ final class NoteViewController: UIViewController {
         updateSearchNavigationButtons()
     }
 
-    @objc private func headerTitleDidChange() {
+    @objc private func titleDidChange() {
         viewModel.didChangeTitle(headerTitleTextField.text)
     }
 
