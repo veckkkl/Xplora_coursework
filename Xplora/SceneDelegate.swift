@@ -35,13 +35,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let tripsRepo: TripsRepo = TripsRepoImpl(storage: storage)
         let placesRepo: PlacesRepo = PlacesRepoImpl(storage: storage)
         let settingsRepo: SettingsRepo = SettingsRepoImpl(storage: storage)
-        let markersRepo: CountryVisitMarkersRepo = CountryVisitMarkersRepoImpl()
         let notesRepo: NotesRepo = NotesRepoImpl(coreDataStack: coreDataStack)
 
         locator.register(TripsRepo.self, instance: tripsRepo)
         locator.register(PlacesRepo.self, instance: placesRepo)
         locator.register(SettingsRepo.self, instance: settingsRepo)
-        locator.register(CountryVisitMarkersRepo.self, instance: markersRepo)
         locator.register(NotesRepo.self, instance: notesRepo)
 
         // Services
@@ -63,13 +61,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let addVisitedPlaceUseCase: AddVisitedPlaceUseCase =
             AddVisitedPlaceUseCaseImpl(placesRepo: placesRepo)
 
-        let getCountryVisitMarkersUseCase: GetCountryVisitMarkersUseCase =
-            GetCountryVisitMarkersUseCaseImpl(markersRepo: markersRepo)
-
         locator.register(GetVisitedCountriesUseCase.self, instance: getVisitedCountriesUseCase)
         locator.register(GetTripsTimelineUseCase.self, instance: getTripsTimelineUseCase)
         locator.register(AddVisitedPlaceUseCase.self, instance: addVisitedPlaceUseCase)
-        locator.register(GetCountryVisitMarkersUseCase.self, instance: getCountryVisitMarkersUseCase)
 
         let getNoteUseCase: GetNoteUseCase = GetNoteUseCaseImpl(notesRepo: notesRepo)
         let getAllNotesUseCase: GetAllNotesUseCase = GetAllNotesUseCaseImpl(notesRepo: notesRepo)

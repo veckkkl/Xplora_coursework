@@ -8,9 +8,11 @@ import Foundation
 struct NotesListItemViewState: Equatable {
     let id: String
     let title: String
-    let subtitle: String
+    let textPreview: String
     let dateText: String
+    let locationChipText: String?
     let isBookmarked: Bool
+    let photoURLs: [URL]
 }
 
 struct NotesListViewState: Equatable {
@@ -91,14 +93,37 @@ final class NotesListViewModel: NotesListViewModelInput, NotesListViewModelOutpu
 
     private func publish() {
         let items = notes.map { note in
-            NotesListItemViewState(
+            let resolvedTitle = NotePresentationTitle.displayTitle(from: note.title)
+
+            let trimmedText = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let textPreview = trimmedText.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+
+            let resolvedRange = NoteDateRangeResolver.effectiveRange(
+                tripStartDate: note.tripStartDate,
+                tripEndDate: note.tripEndDate
+            )
+            let dateText: String
+            if let start = resolvedRange.start, let end = resolvedRange.end {
+                dateText = NoteDateRangeFormatter.displayText(startDate: start, endDate: end)
+            } else {
+                dateText = NoteDateRangeFormatter.displayText(for: note.createdAt)
+            }
+
+            let locationTitle = note.location?.placeName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let locationChipText: String? = {
+                if !locationTitle.isEmpty { return locationTitle }
+                let address = note.location?.address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return address.isEmpty ? nil : address
+            }()
+
+            return NotesListItemViewState(
                 id: note.id,
-                title: note.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                    ? (note.title ?? "")
-                    : note.location.placeName,
-                subtitle: note.text.trimmingCharacters(in: .whitespacesAndNewlines),
-                dateText: Self.dateFormatter.string(from: note.updatedAt),
-                isBookmarked: note.isBookmarked
+                title: resolvedTitle,
+                textPreview: textPreview,
+                dateText: dateText,
+                locationChipText: locationChipText,
+                isBookmarked: note.isBookmarked,
+                photoURLs: note.photoURLs
             )
         }
 
@@ -110,11 +135,4 @@ final class NotesListViewModel: NotesListViewModelInput, NotesListViewModelOutpu
             )
         )
     }
-
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
 }
