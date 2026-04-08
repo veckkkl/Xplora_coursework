@@ -11,7 +11,7 @@ enum NotePresentationFactory {
             return title
         }
 
-        let placeName = note.location.placeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let placeName = note.location?.placeName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !placeName.isEmpty {
             return placeName
         }
@@ -39,12 +39,12 @@ enum NotePresentationFactory {
     }
 
     static func locationTitle(for note: Note) -> String? {
-        let trimmed = note.location.placeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = note.location?.placeName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
     }
 
     static func locationSubtitle(for note: Note) -> String? {
-        guard let address = note.location.address?.trimmingCharacters(in: .whitespacesAndNewlines), !address.isEmpty else {
+        guard let address = note.location?.address?.trimmingCharacters(in: .whitespacesAndNewlines), !address.isEmpty else {
             return nil
         }
         return address
