@@ -232,10 +232,11 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         guard var current = draft else { return }
         let trimmedName = placeName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        let trimmedAddress = address?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let (city, country) = parseCityCountry(from: address)
         current.location = NoteLocation(
             placeName: trimmedName,
-            address: (trimmedAddress?.isEmpty ?? true) ? nil : trimmedAddress,
+            city: city,
+            country: country,
             latitude: latitude,
             longitude: longitude
         )
@@ -245,7 +246,13 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     func didRemoveLocation() {
         guard var current = draft else { return }
-        current.location = nil
+        current.location = NoteLocation(
+            placeName: "",
+            city: "",
+            country: "",
+            latitude: current.location.latitude,
+            longitude: current.location.longitude
+        )
         draft = current
         publish()
     }
@@ -282,16 +289,19 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
         let now = Date()
         let note = Note(
             id: UUID().uuidString,
-            coordinate: coordinate,
             title: nil,
             text: "",
-            photoURLs: [],
             createdAt: now,
             updatedAt: now,
-            city: nil,
-            country: nil,
-            location: nil,
             isBookmarked: false,
+            location: NoteLocation(
+                placeName: "",
+                city: "",
+                country: "",
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            ),
+            photos: [],
             dateRangeText: nil,
             headerTitle: nil
         )
@@ -310,12 +320,12 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
             title: current.title ?? "",
             placeTitle: formatHeaderTitle(for: current),
             text: current.text,
-            locationTitle: current.location?.placeName ?? "",
-            locationSubtitle: current.location?.address ?? "",
-            hasLocation: current.location != nil,
-            locationCoordinate: current.location.map {
-                LocationCoordinate(latitude: $0.latitude, longitude: $0.longitude)
-            },
+            locationTitle: current.location.hasDisplayableValue ? current.location.placeName : "",
+            locationSubtitle: current.location.hasDisplayableValue ? (current.location.address ?? "") : "",
+            hasLocation: current.location.hasDisplayableValue,
+            locationCoordinate: current.location.hasDisplayableValue
+                ? LocationCoordinate(latitude: current.location.latitude, longitude: current.location.longitude)
+                : nil,
             dateText: formatDateText(for: current),
             isSaveEnabled: isSaveEnabled(for: current),
             isDeleteVisible: originalNote != nil,
@@ -330,7 +340,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     private func isSaveEnabled(for note: Note) -> Bool {
         let trimmed = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
+        guard !trimmed.isEmpty, note.location.hasDisplayableValue else { return false }
         if let original = originalNote {
             return original != note
         }
@@ -339,7 +349,7 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
 
     private func hasUnsavedChanges(_ note: Note) -> Bool {
         guard let original = originalNote else {
-            return !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || note.location.hasDisplayableValue
         }
         return original != note
     }
@@ -355,6 +365,21 @@ final class NoteViewModel: NoteViewModelInput, NoteViewModelOutput {
             return country
         }
         return "Untitled"
+    }
+
+    private func parseCityCountry(from address: String?) -> (String, String) {
+        let trimmed = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return ("", "") }
+        let parts = trimmed
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if parts.count >= 2 {
+            return (parts[parts.count - 2], parts[parts.count - 1])
+        }
+
+        return (parts.first ?? "", "")
     }
 
     private func formatDateText(for note: Note) -> String {
