@@ -123,9 +123,16 @@ final class MapViewModel: MapViewModelInput, MapViewModelOutput {
         let noteTitle = note.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let title = !placeName.isEmpty ? placeName : (!noteTitle.isEmpty ? noteTitle : "Pinned note")
         let countryCode = location.country.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let dateRange = (note.dateRangeText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
-            ? (note.dateRangeText ?? "")
-            : markerDateFormatter.string(from: note.updatedAt)
+        let resolvedRange = NoteDateRangeResolver.effectiveRange(
+            tripStartDate: note.tripStartDate,
+            tripEndDate: note.tripEndDate
+        )
+        let dateRange: String
+        if let start = resolvedRange.start, let end = resolvedRange.end {
+            dateRange = NoteDateRangeFormatter.displayText(startDate: start, endDate: end)
+        } else {
+            dateRange = markerDateFormatter.string(from: note.updatedAt)
+        }
 
         return CountryVisitMarker(
             countryCode: countryCode,
