@@ -5,6 +5,7 @@
 
 import UIKit
 
+@MainActor
 protocol NoteRouter: AnyObject {
     func showNote(noteId: String?, coordinate: LocationCoordinate?, output: NoteModuleOutput?)
     func closeNote()
